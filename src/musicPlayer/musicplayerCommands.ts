@@ -7,22 +7,27 @@ import {
   VoiceBasedChannel,
 } from "discord.js";
 import fs from "fs";
+import os from "os";
 import sqlite3 from "sqlite3";
 import MusicPlayer from "./MusicPlayer";
 
-let CACHE_PATH = "cache";
+let CACHE_ROOT = os.tmpdir();
+
 process.argv.find((val, index) => {
   const splitVal = val.split("=");
   if (
     splitVal.length > 1 &&
-    splitVal[0].trim() === "--cachePath" &&
+    splitVal[0].trim() === "--cache" &&
     splitVal[1].length > 0
   ) {
-    CACHE_PATH = splitVal[1].trim();
+    CACHE_ROOT = splitVal[1].trim();
   }
 });
+
+const CACHE_PATH = `${CACHE_ROOT}/PashaPlayer/cache`;
 const STAGING_PATH = `${CACHE_PATH}/staging`;
 const DB_PATH = `${CACHE_PATH}/cache.db`;
+
 const db = new sqlite3.Database(DB_PATH);
 db.run(
   "CREATE TABLE IF NOT EXISTS video_info (video_id TEXT PRIMARY KEY, info TEXT, insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
