@@ -1,4 +1,3 @@
-import "dotenv/config";
 import {
   CacheType,
   ChatInputCommandInteraction,
@@ -9,7 +8,8 @@ import {
   Routes,
   SlashCommandBuilder,
 } from "discord.js";
-import { playCommand } from "./musicplayer";
+import "dotenv/config";
+import { playCommand, queueCommand } from "./musicplayer";
 
 const helloCommand = {
   data: new SlashCommandBuilder()
@@ -22,7 +22,7 @@ const helloCommand = {
 
 const commands = {
   [playCommand.data.name]: playCommand,
-  [helloCommand.data.name]: helloCommand,
+  [queueCommand.data.name]: queueCommand,
 };
 
 const client = new Client({
@@ -36,7 +36,6 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  // console.log(`Got interaction`, interaction);
   if (!interaction.isChatInputCommand()) return;
   console.log(`Got interaction ${interaction.commandName}`);
 

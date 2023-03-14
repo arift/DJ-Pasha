@@ -6,92 +6,243 @@ import {
   joinVoiceChannel,
   VoiceConnection,
 } from "@discordjs/voice";
-import crypto from "crypto";
 import {
   CacheType,
   ChatInputCommandInteraction,
+  EmbedBuilder,
   GuildMember,
+  GuildTextBasedChannel,
+  MessageCreateOptions,
   SlashCommandBuilder,
   VoiceBasedChannel,
 } from "discord.js";
 import fs from "fs";
+import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
 
+const CACHE_PATH = "cache";
+const STAGING_PATH = `${CACHE_PATH}/staging`;
+const DB_PATH = `${CACHE_PATH}/cache.db`;
+
+if (!fs.existsSync(CACHE_PATH)) {
+  fs.mkdirSync(CACHE_PATH);
+}
+
+if (!fs.existsSync(STAGING_PATH)) {
+  fs.mkdirSync(STAGING_PATH);
+}
+
+const db = new sqlite3.Database(DB_PATH);
+db.run(
+  "CREATE TABLE IF NOT EXISTS video_info (video_id TEXT PRIMARY KEY, info TEXT, insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
+);
+
+const toHoursAndMinutes = (totalSeconds: number) => {
+  const totalMinutes = Math.floor(totalSeconds / 60);
+
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  const minutes = String(totalMinutes % 60).padStart(2, "0");
+  const hours = Math.floor(totalMinutes / 60);
+
+  return [hours, minutes, seconds].join(":");
+};
+
+const getVideoInfo = (url: string) =>
+  new Promise<SavedInfo>(async (res, rej) => {
+    let videoId: string;
+    try {
+      videoId = ytdl.getURLVideoID(url);
+    } catch (err) {
+      throw new Error("Bad URL input. Check your YouTube URL: " + url);
+    }
+    console.log(`getVideoInfo[${videoId}]: Getting video info`);
+    db.get(
+      "select * from video_info where video_id = $videoId",
+      {
+        $videoId: videoId,
+      },
+      async (err, row) => {
+        if (err) {
+          rej(err);
+          return;
+        }
+
+        if (!row) {
+          console.log(`getVideoInfo[${videoId}]: Not in cache, fetching it.`);
+          const info = await ytdl.getInfo(url);
+          const savedInfo: SavedInfo = {
+            title: info.videoDetails.title,
+            ownerChannelName: info.videoDetails.ownerChannelName,
+            description: info.videoDetails.description,
+            lengthSeconds: info.videoDetails.lengthSeconds,
+            videoUrl: info.videoDetails.video_url,
+          };
+          console.log(
+            `getVideoInfo[${videoId}]: Done fetching. Adding to cache.`
+          );
+          db.run(
+            "INSERT OR REPLACE INTO video_info (video_id, info) VALUES(:videoId, :info)",
+            [videoId, JSON.stringify(savedInfo)]
+          );
+          return res(await getVideoInfo(url));
+        }
+        console.log(`getVideoInfo[${videoId}]: Info in cache. Returning it.`);
+        res(JSON.parse(row.info));
+      }
+    );
+  });
+
+type SavedInfo = {
+  title: string;
+  ownerChannelName: string;
+  description: string;
+  lengthSeconds: string;
+  videoUrl: string;
+};
 const musicPlayersByChannel: { [id: string]: MusicPlayer } = {};
 
+type SongRequest = { url: string; by: string };
 class MusicPlayer {
-  channel: VoiceBasedChannel;
+  voiceChannel: VoiceBasedChannel;
+  textChannel: GuildTextBasedChannel;
   audioPlayer: AudioPlayer;
   voiceConnection: VoiceConnection;
-  playList = [];
+  queueu: Array<SongRequest> = [];
   playing = false;
+  nowPlaying: SongRequest | null = null;
 
-  constructor(channel: VoiceBasedChannel) {
-    this.channel = channel;
+  constructor(
+    voiceChannel: VoiceBasedChannel,
+    textChannel: GuildTextBasedChannel
+  ) {
+    this.voiceChannel = voiceChannel;
+    this.textChannel = textChannel;
     this.voiceConnection = joinVoiceChannel({
-      channelId: channel.id,
-      guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
+      channelId: voiceChannel.id,
+      guildId: voiceChannel.guild.id,
+      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
     });
     this.audioPlayer = createAudioPlayer();
     this.voiceConnection.subscribe(this.audioPlayer);
   }
 
-  addSong(url: string) {
-    console.log("Added song to the queue ", url);
-    this.playList.push(url);
+  addSong(request: SongRequest) {
+    console.log("Added song to the queue ", request.url);
+    this.queueu.push(request);
   }
 
-  play() {
-    this.playing = true;
-    const playNextSong = () => {
-      console.log("Playing next song");
-      const url = this.playList.shift();
-      if (!url) {
-        console.log("No new song. Stopping play");
-        this.playing = false;
+  ensureSongCached = (url: string) =>
+    new Promise<string>((res, rej) => {
+      console.log(`addSongToCache[${url}]: Adding song to cache, if needed.`);
+      const videoId = ytdl.getURLVideoID(url);
+      const cachedFilePath = `${CACHE_PATH}/${videoId}.webm`;
+      if (fs.existsSync(cachedFilePath)) {
+        console.log(`addSongToCache[${url}]: Already in cache.`);
+        res(cachedFilePath);
       } else {
-        this.playUrl(url);
+        const t = Date.now();
+        console.log(`addSongToCache[${url}]: Not in cache, downloading it...`);
+        const ytStream = ytdl(url, { filter: "audioonly", quality: "251" });
+        const stagingPath = `${STAGING_PATH}/${videoId}.webm`;
+        ytStream.pipe(fs.createWriteStream(stagingPath));
+        ytStream.on("end", (args) => {
+          console.log(
+            `addSongToCache[${url}]: Downloaded it in ${
+              (Date.now() - t) / 1000
+            } seconds`
+          );
+          try {
+            fs.renameSync(stagingPath, cachedFilePath);
+            res(cachedFilePath);
+          } catch (err) {
+            console.log(`addSongToCache[${url}]: Rename failed!`);
+          }
+        });
       }
+    });
+
+  async play() {
+    const musicPlayer = this;
+    this.playing = true;
+    const playNextSong = async () => {
+      const queuedItem = this.queueu.shift();
+      console.log(`play[${queuedItem}]: Playing next song...`);
+      if (!queuedItem) return;
+      const filePath = await this.ensureSongCached(queuedItem.url);
+      //precache next
+      if (this.queueu.length > 0) {
+        await this.ensureSongCached(this.queueu[0].url);
+      }
+      console.log("Playing url next", queuedItem);
+      this.nowPlaying = queuedItem;
+      this.audioPlayer.play(createAudioResource(filePath));
+      musicPlayer.sendNowPlayingStatus();
     };
 
-    playNextSong();
-
-    this.audioPlayer.on(AudioPlayerStatus.Idle, () => {
+    this.audioPlayer.on(AudioPlayerStatus.Idle, async () => {
       console.log("In idle, playing next song");
-      playNextSong();
-    });
-  }
-
-  playFromCache(path: string) {
-    this.audioPlayer.play(createAudioResource(path));
-  }
-
-  playUrl(url: string) {
-    const musicPlayer = this;
-    console.log("Playing url next", url);
-    const urlHash = crypto.createHash("sha1").update(url).digest("hex");
-    const cachePath = `./cache/${urlHash}.webm`;
-    if (fs.existsSync(cachePath)) {
-      this.playFromCache(cachePath);
-    } else {
-      console.log("Song not in cache. Downloading it from ytdl");
-      if (!ytdl.validateURL(url)) {
-        throw new Error("Not a valid url: " + url);
+      if (musicPlayer.queueu.length === 0) {
+        musicPlayer.playing = false;
+        musicPlayer.nowPlaying = null;
+        musicPlayer.textChannel.send("No more songs in the queue. Pausing.");
+        console.log("No new song. Stopping play");
+      } else {
+        await playNextSong();
       }
-      const ytStream = ytdl(url, { filter: "audioonly", quality: "251" });
-      const stagingPath = `./cache/.staging/${urlHash}.webm`;
-      ytStream.pipe(fs.createWriteStream(stagingPath));
-      ytStream.on("end", function (args) {
-        try {
-          fs.renameSync(stagingPath, cachePath);
-        } catch (err) {
-          console.error("Renaming from staging to cache failed", err);
-        }
-        console.log("Downloaded song. Playing it!");
-        musicPlayer.playFromCache(cachePath);
-      });
+    });
+    await playNextSong();
+  }
+
+  async sendNowPlayingStatus() {
+    if (!this.nowPlaying) {
+      return;
     }
+    const songRequest = this.nowPlaying;
+    const nowPlayingInfo = await getVideoInfo(songRequest.url);
+    const nowPlayingText = `
+    **${nowPlayingInfo.title} - ${nowPlayingInfo.ownerChannelName}**
+    
+    **Duration**: \`${toHoursAndMinutes(Number(nowPlayingInfo.lengthSeconds))}\`
+    **Requester**: \`${songRequest.by}\`
+    **Queue   **: \`${this.queueu.length}\`
+    `;
+    const toSend: MessageCreateOptions = {
+      content: "",
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#33D7FF")
+          .setTitle("Now Playing")
+          .setDescription(nowPlayingText),
+      ],
+    };
+    this.textChannel.send(toSend);
+  }
+
+  async sendQueueStatus() {
+    const playListInfo: Array<SavedInfo> = [];
+    for (let idx = 0; idx < this.queueu.length; idx++) {
+      const songRequest = this.queueu[idx];
+      const info = await getVideoInfo(songRequest.url);
+      playListInfo.push(info);
+    }
+
+    let queueText: string;
+    if (playListInfo.length) {
+      queueText = `${playListInfo
+        .map((info, idx) => `**${idx + 1}**: ${info.title}`)
+        .join("\n")}`;
+    }
+
+    const toSend: MessageCreateOptions = {
+      content: "",
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#33D7FF")
+          .setTitle("Next up:")
+          .setDescription(queueText ?? "Queue is empty"),
+      ],
+    };
+    this.textChannel.send(toSend);
   }
 }
 
@@ -103,24 +254,62 @@ export const playCommand = {
       option.setName("url").setDescription("URL of song").setRequired(true)
     ),
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
-    const channel = (interaction.member as GuildMember).voice.channel;
+    const username = interaction.user.username;
+    const voiceChannel = (interaction.member as GuildMember).voice.channel;
+    const textChannel = interaction.channel;
     const url = interaction.options.getString("url").trim();
+    await interaction.deferReply();
+    const info = await getVideoInfo(url);
 
-    if (!musicPlayersByChannel[channel.id]) {
-      musicPlayersByChannel[channel.id] = new MusicPlayer(channel);
-    }
-
-    const musicPlayer = musicPlayersByChannel[channel.id];
-    musicPlayer.addSong(url);
-    if (!musicPlayer.playing) {
-      try {
-        musicPlayer.play();
-      } catch (error) {
-        console.error("music player error", error);
+    try {
+      if (!musicPlayersByChannel[voiceChannel.id]) {
+        musicPlayersByChannel[voiceChannel.id] = new MusicPlayer(
+          voiceChannel,
+          textChannel
+        );
       }
+
+      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      musicPlayer.addSong({ url, by: username });
+
+      if (!musicPlayer.playing) {
+        try {
+          await musicPlayer.play();
+        } catch (error) {
+          console.error("music player error", error);
+        }
+      }
+
+      //song you just added is the only one in queue, cache it
+      if (musicPlayer.queueu.length === 1) {
+        musicPlayer.ensureSongCached(musicPlayer.queueu[0].url);
+      }
+
+      await interaction.editReply(
+        `:notes: | Added **${info.title}** to the queue.`
+      );
+      // musicPlayer.sendStatus();
+    } catch (err) {
+      await interaction.editReply(`Error: ${err}`);
+    }
+  },
+};
+
+export const queueCommand = {
+  data: new SlashCommandBuilder().setName("queue").setDescription("Show queue"),
+  execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
+    const voiceChannel = (interaction.member as GuildMember).voice.channel;
+    const textChannel = interaction.channel;
+    if (!musicPlayersByChannel[voiceChannel.id]) {
+      musicPlayersByChannel[voiceChannel.id] = new MusicPlayer(
+        voiceChannel,
+        textChannel
+      );
     }
 
-    // interaction.guild is the object representing the Guild in which the command was run
-    await interaction.reply(`Added song to the queue.`);
+    const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+    musicPlayer.sendQueueStatus();
+    interaction.deferReply();
+    interaction.deleteReply();
   },
 };
