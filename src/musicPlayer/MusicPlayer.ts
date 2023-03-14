@@ -15,23 +15,7 @@ import {
 import fs from "fs";
 import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
-
-const CACHE_PATH = "cache";
-const STAGING_PATH = `${CACHE_PATH}/staging`;
-const DB_PATH = `${CACHE_PATH}/cache.db`;
-
-if (!fs.existsSync(CACHE_PATH)) {
-  fs.mkdirSync(CACHE_PATH);
-}
-
-if (!fs.existsSync(STAGING_PATH)) {
-  fs.mkdirSync(STAGING_PATH);
-}
-
-const db = new sqlite3.Database(DB_PATH);
-db.run(
-  "CREATE TABLE IF NOT EXISTS video_info (video_id TEXT PRIMARY KEY, info TEXT, insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
-);
+import { CACHE_PATH, STAGING_PATH } from "./cache";
 
 const toHoursAndMinutes = (totalSeconds: number) => {
   const totalMinutes = Math.floor(totalSeconds / 60);
