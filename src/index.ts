@@ -1,12 +1,6 @@
-import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
 import "dotenv/config";
-import { moveCommand, playCommand, queueCommand } from "./musicplayer";
-
-const commands = {
-  [playCommand.data.name]: playCommand,
-  [queueCommand.data.name]: queueCommand,
-  [moveCommand.data.name]: moveCommand,
-};
+import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
+import { commands } from "./musicPlayer/musicplayerCommands";
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
