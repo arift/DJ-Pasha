@@ -1,28 +1,11 @@
-import {
-  CacheType,
-  ChatInputCommandInteraction,
-  Client,
-  Events,
-  GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-} from "discord.js";
+import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
 import "dotenv/config";
-import { playCommand, queueCommand } from "./musicplayer";
-
-const helloCommand = {
-  data: new SlashCommandBuilder()
-    .setName("hello")
-    .setDescription("Say hello to the bot"),
-  execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
-    await interaction.reply(`Don't bogard`);
-  },
-};
+import { moveCommand, playCommand, queueCommand } from "./musicplayer";
 
 const commands = {
   [playCommand.data.name]: playCommand,
   [queueCommand.data.name]: queueCommand,
+  [moveCommand.data.name]: moveCommand,
 };
 
 const client = new Client({

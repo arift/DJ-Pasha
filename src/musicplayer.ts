@@ -161,6 +161,19 @@ class MusicPlayer {
       }
     });
 
+  move(from: number, to: number = 1) {
+    const fromIdx = from - 1;
+    const toIdx = to - 1;
+    if (to < 1 || from > this.queueu.length) {
+      throw new Error(
+        `Out of bounds move request. From: ${from}, to: ${to}, queue size: ${this.queueu.length}`
+      );
+    }
+    const temp = this.queueu[toIdx];
+    this.queueu[toIdx] = this.queueu[fromIdx];
+    this.queueu[fromIdx] = temp;
+  }
+
   async play() {
     const musicPlayer = this;
     this.playing = true;
@@ -219,17 +232,17 @@ class MusicPlayer {
   }
 
   async sendQueueStatus() {
-    const playListInfo: Array<SavedInfo> = [];
+    const playListInfo: Array<SavedInfo & { by: SongRequest["by"] }> = [];
     for (let idx = 0; idx < this.queueu.length; idx++) {
       const songRequest = this.queueu[idx];
       const info = await getVideoInfo(songRequest.url);
-      playListInfo.push(info);
+      playListInfo.push({ ...info, by: songRequest.by });
     }
 
     let queueText: string;
     if (playListInfo.length) {
       queueText = `${playListInfo
-        .map((info, idx) => `**${idx + 1}**: ${info.title}`)
+        .map((info, idx) => `**${idx + 1}**: ${info.title} (*${info.by}*)`)
         .join("\n")}`;
     }
 
@@ -249,7 +262,7 @@ class MusicPlayer {
 export const playCommand = {
   data: new SlashCommandBuilder()
     .setName("play")
-    .setDescription("Plays a song.")
+    .setDescription("Play a song or add one to the queue.")
     .addStringOption((option) =>
       option.setName("url").setDescription("URL of song").setRequired(true)
     ),
@@ -286,7 +299,7 @@ export const playCommand = {
       }
 
       await interaction.editReply(
-        `:notes: | Added **${info.title}** to the queue.`
+        `:notes: Added **${info.title}** to the queue.`
       );
       // musicPlayer.sendStatus();
     } catch (err) {
@@ -299,17 +312,61 @@ export const queueCommand = {
   data: new SlashCommandBuilder().setName("queue").setDescription("Show queue"),
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
     const voiceChannel = (interaction.member as GuildMember).voice.channel;
-    const textChannel = interaction.channel;
     if (!musicPlayersByChannel[voiceChannel.id]) {
-      musicPlayersByChannel[voiceChannel.id] = new MusicPlayer(
-        voiceChannel,
-        textChannel
+      interaction.reply(
+        "You don't have any songs playing. Add songs to the queue with /play command."
       );
+      return;
     }
+
+    interaction.deferReply();
+    interaction.deleteReply();
 
     const musicPlayer = musicPlayersByChannel[voiceChannel.id];
     musicPlayer.sendQueueStatus();
+  },
+};
+
+export const moveCommand = {
+  data: new SlashCommandBuilder()
+    .setName("mv")
+    .setDescription(
+      "Move a song in the queue. If `to` is not provided, it will move to the top of the queue."
+    )
+    .addNumberOption((option) => {
+      return option
+        .setName("from")
+        .setDescription("from queue spot")
+        .setRequired(true);
+    })
+    .addNumberOption((option) => {
+      return option
+        .setName("to")
+        .setDescription(
+          "to queue spot (leave empty to move to the top of the queue)"
+        )
+        .setRequired(false);
+    }),
+  execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
+    const voiceChannel = (interaction.member as GuildMember).voice.channel;
+    const from = interaction.options.getNumber("from");
+    const to = interaction.options.getNumber("to", false) ?? 1;
+    if (!musicPlayersByChannel[voiceChannel.id]) {
+      interaction.reply(
+        "You don't have any songs playing. Add songs to the queue with /play command."
+      );
+      return;
+    }
+
+    const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+    try {
+      musicPlayer.move(from, to);
+    } catch (err) {
+      interaction.reply(err.message);
+      return;
+    }
     interaction.deferReply();
     interaction.deleteReply();
+    musicPlayer.sendQueueStatus();
   },
 };
