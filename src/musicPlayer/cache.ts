@@ -1,8 +1,9 @@
 import fs from "fs";
 import os from "os";
+import path from "path";
 import sqlite3 from "sqlite3";
 
-let CACHE_ROOT = os.tmpdir();
+let PROGRAM_FILES_ROOT = os.tmpdir();
 
 process.argv.find((val, index) => {
   const splitVal = val.split("=");
@@ -11,17 +12,19 @@ process.argv.find((val, index) => {
     splitVal[0].trim() === "--cache" &&
     splitVal[1].length > 0
   ) {
-    CACHE_ROOT = splitVal[1].trim();
+    PROGRAM_FILES_ROOT = splitVal[1].trim();
   }
 });
 
-const APP_DIR = `${CACHE_ROOT}/PashaPlayer`;
-const CACHE_PATH = `${APP_DIR}/cache`;
-const STAGING_PATH = `${CACHE_PATH}/staging`;
-const DB_PATH = `${CACHE_PATH}/cache.db`;
+const APP_DIR = path.resolve(PROGRAM_FILES_ROOT, "PashaPlayer");
+const CACHE_PATH = path.resolve(APP_DIR, "cache");
+const STAGING_PATH = path.resolve(CACHE_PATH, "staging");
+const DB_PATH = path.resolve(CACHE_PATH, "cache.db");
 
-if (!fs.existsSync(CACHE_ROOT)) {
-  fs.mkdirSync(CACHE_ROOT);
+console.log(`Setting app directory to ${APP_DIR}`);
+
+if (!fs.existsSync(PROGRAM_FILES_ROOT)) {
+  fs.mkdirSync(PROGRAM_FILES_ROOT);
 }
 
 if (!fs.existsSync(APP_DIR)) {
