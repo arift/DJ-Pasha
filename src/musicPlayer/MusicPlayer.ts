@@ -95,7 +95,8 @@ class MusicPlayer {
       try {
         videoId = ytdl.getURLVideoID(url);
       } catch (err) {
-        throw new Error("Bad URL input. Check your YouTube URL: " + url);
+        rej("Bad URL input. Check your YouTube URL: " + url);
+        return;
       }
       console.log(`getVideoInfo[${videoId}]: Getting video info`);
       this.db.get(
@@ -124,9 +125,17 @@ class MusicPlayer {
             );
             this.db.run(
               "INSERT OR REPLACE INTO video_info (video_id, info) VALUES(:videoId, :info)",
-              [videoId, JSON.stringify(savedInfo)]
+              [videoId, JSON.stringify(savedInfo)],
+              async () => {
+                try {
+                  res(await this.getVideoInfo(url));
+                  return;
+                } catch (err) {
+                  rej("Problem getting the video: " + url);
+                  return;
+                }
+              }
             );
-            return res(await this.getVideoInfo(url));
           }
           console.log(`getVideoInfo[${videoId}]: Info in cache. Returning it.`);
           res(JSON.parse(row.info));
