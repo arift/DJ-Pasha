@@ -16,18 +16,9 @@ import fs from "fs";
 import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
 import { CACHE_PATH, STAGING_PATH } from "./cache";
+import { shuffle, toHoursAndMinutes } from "./utils";
 
-const toHoursAndMinutes = (totalSeconds: number) => {
-  const totalMinutes = Math.floor(totalSeconds / 60);
-
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  const minutes = String(totalMinutes % 60).padStart(2, "0");
-  const hours = Math.floor(totalMinutes / 60);
-
-  return [hours, minutes, seconds].join(":");
-};
-
-type SavedInfo = {
+export type SavedInfo = {
   title: string;
   ownerChannelName: string;
   description: string;
@@ -42,10 +33,11 @@ class MusicPlayer {
   textChannel: GuildTextBasedChannel;
   audioPlayer: AudioPlayer;
   voiceConnection: VoiceConnection;
-  queueu: Array<SongRequest> = [];
+  queueu: Array<SongRequest>;
   playing = false;
   nowPlaying: SongRequest | null = null;
   db: sqlite3.Database;
+  hydraterInterval: NodeJS.Timer;
 
   constructor(
     voiceChannel: VoiceBasedChannel,
@@ -60,21 +52,33 @@ class MusicPlayer {
       guildId: voiceChannel.guild.id,
       adapterCreator: voiceChannel.guild.voiceAdapterCreator,
     });
+    this.queueu = [];
     this.audioPlayer = createAudioPlayer();
     this.voiceConnection.subscribe(this.audioPlayer);
     const musicPlayer = this;
+    this.hydraterInterval = this.startHydraterInterval();
 
     this.audioPlayer.on(AudioPlayerStatus.Idle, async () => {
       console.log("In idle, playing next song");
       if (musicPlayer.queueu.length === 0) {
+        console.log("No new song. Stopping play");
         musicPlayer.playing = false;
         musicPlayer.nowPlaying = null;
         musicPlayer.textChannel.send("No more songs in the queue. Pausing.");
-        console.log("No new song. Stopping play");
+        clearInterval(musicPlayer.hydraterInterval);
+        musicPlayer.hydraterInterval = null;
       } else {
         await musicPlayer.playNextSong();
       }
     });
+  }
+
+  startHydraterInterval() {
+    return setInterval(() => {
+      if (this.queueu.length > 0) {
+        this.ensureSongCached(this.queueu[0].url);
+      }
+    }, 5000);
   }
 
   getVideoInfo = (url: string) =>
@@ -123,7 +127,7 @@ class MusicPlayer {
     });
 
   addSong(request: SongRequest) {
-    console.log("Added song to the queue ", request.url);
+    console.log(`addSong(${request.url})`);
     this.queueu.push(request);
   }
 
@@ -151,7 +155,7 @@ class MusicPlayer {
             fs.renameSync(stagingPath, cachedFilePath);
             res(cachedFilePath);
           } catch (err) {
-            console.log(`addSongToCache[${url}]: Rename failed!`);
+            console.error(err);
           }
         });
       }
@@ -183,13 +187,12 @@ class MusicPlayer {
     this.queueu.splice(positionIdx, 1);
   }
 
+  shuffle() {
+    this.queueu = shuffle(this.queueu);
+  }
+
   async skip() {
-    if (this.queueu.length === 0) {
-      this.audioPlayer.stop();
-      this.playing = false;
-      this.nowPlaying = null;
-      return;
-    }
+    this.audioPlayer.stop();
     await this.playNextSong();
   }
 
@@ -197,23 +200,17 @@ class MusicPlayer {
     const queuedItem = this.queueu.shift();
     if (!queuedItem) return;
 
-    console.log(`playNextSong: Playing next song...`);
+    console.log(`playNextSong[${queuedItem.url}]`);
     const filePath = await this.ensureSongCached(queuedItem.url);
     this.nowPlaying = queuedItem;
     this.audioPlayer.play(createAudioResource(filePath));
     this.textChannel.send(await this.getNowPlayingStatus());
-    //precache next
-    if (this.queueu.length > 0) {
-      console.log("Precaching next song: ", this.queueu[0].url);
-      this.ensureSongCached(this.queueu[0].url);
+    if (!this.playing) {
+      this.playing = true;
     }
-  }
-
-  async play() {
-    const musicPlayer = this;
-    this.playing = true;
-
-    await musicPlayer.playNextSong();
+    if (!this.hydraterInterval) {
+      this.hydraterInterval = this.startHydraterInterval();
+    }
   }
 
   async getNowPlayingStatus() {
