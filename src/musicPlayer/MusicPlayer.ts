@@ -62,22 +62,7 @@ class MusicPlayer {
 
     this.audioPlayer.on(AudioPlayerStatus.Idle, async () => {
       console.log("In idle, playing next song");
-      if (musicPlayer.queueu.length === 0) {
-        console.log("No new song. Stopping play");
-        musicPlayer.playing = false;
-        musicPlayer.nowPlaying = null;
-        musicPlayer.textChannel.send(
-          "No more songs in the queue. Pasha will disconnect in 60 seconds."
-        );
-        clearInterval(musicPlayer.hydraterInterval);
-        musicPlayer.hydraterInterval = null;
-        this.disconnectTimeout = setTimeout(() => {
-          this.voiceConnection.disconnect();
-          musicPlayersByChannel[this.voiceChannel.id] = null;
-        }, 60000);
-      } else {
-        await musicPlayer.playNextSong();
-      }
+      await musicPlayer.playNextSong();
     });
   }
 
@@ -98,7 +83,8 @@ class MusicPlayer {
         rej("Bad URL input. Check your YouTube URL: " + url);
         return;
       }
-      console.log(`getVideoInfo[${videoId}]: Getting video info`);
+
+      console.log(`Getting video info for: ${url}`);
       this.db.get(
         "select * from video_info where video_id = $videoId",
         {
@@ -110,41 +96,43 @@ class MusicPlayer {
             return;
           }
 
-          if (!row) {
-            console.log(`getVideoInfo[${videoId}]: Not in cache, fetching it.`);
-            const info = await ytdl.getInfo(url);
-            const savedInfo: SavedInfo = {
-              title: info.videoDetails.title,
-              ownerChannelName: info.videoDetails.ownerChannelName,
-              description: info.videoDetails.description,
-              lengthSeconds: info.videoDetails.lengthSeconds,
-              videoUrl: info.videoDetails.video_url,
-            };
-            console.log(
-              `getVideoInfo[${videoId}]: Done fetching. Adding to cache.`
-            );
-            this.db.run(
-              "INSERT OR REPLACE INTO video_info (video_id, info) VALUES(:videoId, :info)",
-              [videoId, JSON.stringify(savedInfo)],
-              async () => {
-                try {
-                  res(await this.getVideoInfo(url));
-                  return;
-                } catch (err) {
-                  rej("Problem getting the video: " + url);
-                  return;
-                }
-              }
-            );
+          if (row) {
+            console.log(`Got video info from cache: ${url}`);
+            res(JSON.parse(row.info));
+            return;
           }
-          console.log(`getVideoInfo[${videoId}]: Info in cache. Returning it.`);
-          res(JSON.parse(row.info));
+
+          console.log(`Fetching video info: ${url}`);
+          const info = await ytdl.getInfo(url);
+          const savedInfo: SavedInfo = {
+            title: info.videoDetails.title,
+            ownerChannelName: info.videoDetails.ownerChannelName,
+            description: info.videoDetails.description,
+            lengthSeconds: info.videoDetails.lengthSeconds,
+            videoUrl: info.videoDetails.video_url,
+          };
+
+          res(savedInfo);
+          this.db.run(
+            "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
+            { $videoId: videoId, $info: JSON.stringify(savedInfo) },
+            async () => {
+              try {
+                res(await this.getVideoInfo(url));
+                return;
+              } catch (err) {
+                rej("Problem getting the video info: " + url);
+                return;
+              }
+            }
+          );
+          return;
         }
       );
     });
 
   addSong(request: SongRequest) {
-    console.log(`addSong[${request.url}]`);
+    console.log(`Adding song to the queue ${request.url}`);
     this.queueu.push(request);
   }
 
@@ -156,15 +144,13 @@ class MusicPlayer {
         res(cachedFilePath);
       } else {
         const t = Date.now();
-        console.log(`addSongToCache[${url}]: Not in cache, downloading it...`);
+        console.log(`Song not in cache, downloading it: ${url}`);
         const ytStream = ytdl(url, { filter: "audioonly", quality: "251" });
         const stagingPath = `${STAGING_PATH}/${videoId}.webm`;
         ytStream.pipe(fs.createWriteStream(stagingPath));
         ytStream.on("end", (args) => {
           console.log(
-            `addSongToCache[${url}]: Downloaded it in ${
-              (Date.now() - t) / 1000
-            } seconds`
+            `Song downloaded it in ${(Date.now() - t) / 1000} seconds: ${url}`
           );
           try {
             fs.renameSync(stagingPath, cachedFilePath);
@@ -207,19 +193,33 @@ class MusicPlayer {
   }
 
   async skip() {
-    this.audioPlayer.stop();
+    this.audioPlayer.stop(true);
     await this.playNextSong();
   }
 
   async playNextSong() {
     const queuedItem = this.queueu.shift();
-    if (!queuedItem) return;
 
-    console.log(`playNextSong[${queuedItem.url}]`);
-    const filePath = await this.ensureSongCached(queuedItem.url);
-    this.nowPlaying = queuedItem;
-    this.audioPlayer.play(createAudioResource(filePath));
-    this.textChannel.send(await this.getNowPlayingStatus());
+    //clean up and start the disconnect timer, since we're out of songs
+    if (!queuedItem) {
+      console.log("Out of songs. Starting disconnect timer.");
+      clearInterval(this.hydraterInterval);
+      this.hydraterInterval = null;
+      this.playing = false;
+      this.nowPlaying = null;
+      clearTimeout(this.disconnectTimeout);
+      this.disconnectTimeout = setTimeout(() => {
+        this.voiceConnection.disconnect();
+        this.voiceConnection.destroy();
+        musicPlayersByChannel[this.voiceChannel.id] = null;
+      }, 60000);
+      this.textChannel.send(
+        "No more songs in the queue. DJ Pasha will disconnect in 60 seconds."
+      );
+      return;
+    }
+
+    //ensure we're in playing state
     if (this.disconnectTimeout) {
       clearTimeout(this.disconnectTimeout);
       this.disconnectTimeout = null;
@@ -229,6 +229,17 @@ class MusicPlayer {
     }
     if (!this.hydraterInterval) {
       this.hydraterInterval = this.startHydraterInterval();
+    }
+
+    //play next song
+    try {
+      console.log(`Playing next song: ${queuedItem.url}`);
+      const filePath = await this.ensureSongCached(queuedItem.url);
+      this.nowPlaying = queuedItem;
+      this.audioPlayer.play(createAudioResource(filePath));
+      this.textChannel.send(await this.getNowPlayingStatus());
+    } catch (err) {
+      await this.playNextSong();
     }
   }
 

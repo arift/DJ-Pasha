@@ -37,6 +37,12 @@ export const playCommand = {
     const textChannel = interaction.channel;
     const url = interaction.options.getString("url").trim();
 
+    if (!voiceChannel) {
+      await interaction.editReply(
+        `:warning: You must be in a voice channel to use DJPasha!`
+      );
+      return;
+    }
     try {
       if (!musicPlayersByChannel[voiceChannel.id]) {
         musicPlayersByChannel[voiceChannel.id] = new MusicPlayer(
