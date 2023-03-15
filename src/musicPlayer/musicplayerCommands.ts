@@ -8,8 +8,7 @@ import {
 } from "discord.js";
 import { db } from "./cache";
 import MusicPlayer, { SavedInfo } from "./MusicPlayer";
-
-const musicPlayersByChannel: { [id: string]: MusicPlayer } = {};
+import musicPlayersByChannel from "./musicPlayersByChannel";
 
 const musicPlayerCheck = async (
   voiceChannel: VoiceBasedChannel,

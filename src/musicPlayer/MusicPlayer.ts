@@ -16,6 +16,7 @@ import fs from "fs";
 import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
 import { CACHE_PATH, STAGING_PATH } from "./cache";
+import musicPlayersByChannel from "./musicPlayersByChannel";
 import { shuffle, toHoursAndMinutes } from "./utils";
 
 export type SavedInfo = {
@@ -38,6 +39,7 @@ class MusicPlayer {
   nowPlaying: SongRequest | null = null;
   db: sqlite3.Database;
   hydraterInterval: NodeJS.Timer;
+  disconnectTimeout: NodeJS.Timeout;
 
   constructor(
     voiceChannel: VoiceBasedChannel,
@@ -64,9 +66,15 @@ class MusicPlayer {
         console.log("No new song. Stopping play");
         musicPlayer.playing = false;
         musicPlayer.nowPlaying = null;
-        musicPlayer.textChannel.send("No more songs in the queue. Pausing.");
+        musicPlayer.textChannel.send(
+          "No more songs in the queue. Pasha will disconnect in 60 seconds."
+        );
         clearInterval(musicPlayer.hydraterInterval);
         musicPlayer.hydraterInterval = null;
+        this.disconnectTimeout = setTimeout(() => {
+          this.voiceConnection.disconnect();
+          musicPlayersByChannel[this.voiceChannel.id] = null;
+        }, 60000);
       } else {
         await musicPlayer.playNextSong();
       }
@@ -127,17 +135,15 @@ class MusicPlayer {
     });
 
   addSong(request: SongRequest) {
-    console.log(`addSong(${request.url})`);
+    console.log(`addSong[${request.url}]`);
     this.queueu.push(request);
   }
 
   ensureSongCached = (url: string) =>
     new Promise<string>((res, rej) => {
-      console.log(`addSongToCache[${url}]: Adding song to cache, if needed.`);
       const videoId = ytdl.getURLVideoID(url);
       const cachedFilePath = `${CACHE_PATH}/${videoId}.webm`;
       if (fs.existsSync(cachedFilePath)) {
-        console.log(`addSongToCache[${url}]: Already in cache.`);
         res(cachedFilePath);
       } else {
         const t = Date.now();
@@ -205,6 +211,10 @@ class MusicPlayer {
     this.nowPlaying = queuedItem;
     this.audioPlayer.play(createAudioResource(filePath));
     this.textChannel.send(await this.getNowPlayingStatus());
+    if (this.disconnectTimeout) {
+      clearTimeout(this.disconnectTimeout);
+      this.disconnectTimeout = null;
+    }
     if (!this.playing) {
       this.playing = true;
     }
