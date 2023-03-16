@@ -243,7 +243,12 @@ class MusicPlayer {
               `Song downloaded it in ${(Date.now() - t) / 1000} seconds: ${url}`
             );
             try {
-              fs.renameSync(stagingPath, cachedFilePath);
+              if (
+                !fs.existsSync(cachedFilePath) &&
+                fs.existsSync(stagingPath)
+              ) {
+                fs.renameSync(stagingPath, cachedFilePath);
+              }
               res(cachedFilePath);
             } catch (err) {
               console.error("Rename error: ", err);
