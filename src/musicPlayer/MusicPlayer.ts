@@ -15,9 +15,8 @@ import {
   VoiceState,
 } from "discord.js";
 import fs from "fs";
-import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
-import { CACHE_PATH, STAGING_PATH } from "./cache";
+import { CACHE_PATH, Database, STAGING_PATH } from "./cache";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
 import { shuffle, toHoursAndMinutes } from "./utils";
 
@@ -40,14 +39,14 @@ class MusicPlayer {
   queueu: Array<SongRequest>;
   playing = false;
   nowPlaying: SongRequest | null = null;
-  db: sqlite3.Database;
+  db: Database;
   hydraterInterval: NodeJS.Timer | null;
   disconnectTimeout: NodeJS.Timeout | null;
   onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
   constructor(
     voiceChannel: VoiceBasedChannel,
     textChannel: GuildTextBasedChannel,
-    db: sqlite3.Database,
+    db: Database,
     client: Client
   ) {
     console.log(
@@ -158,32 +157,34 @@ class MusicPlayer {
       const filePath = await this.ensureSongCached(queuedItem.url);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
-      await new Promise<void>((res) =>
-        this.db.run(
+      try {
+        await this.db.runSync(
           `
-        INSERT OR IGNORE INTO plays_info (video_id, username, play_count)
-        VALUES ($videoId, $username, 0)
-      `,
+            INSERT OR IGNORE INTO plays_info (video_id, username, play_count)
+            VALUES ($videoId, $username, 0)
+          `,
           {
             $videoId: videoId,
             $username: queuedItem.by,
-          },
-          () => {
-            res();
           }
-        )
-      );
-      this.db.run(
-        `
-        UPDATE OR IGNORE plays_info 
-        SET play_count = play_count + 1, last_play = CURRENT_TIMESTAMP
-        WHERE video_id = $videoId AND username = $username
-       `,
-        {
-          $videoId: videoId,
-          $username: queuedItem.by,
-        }
-      );
+        );
+        await this.db.runSync(
+          `
+            UPDATE OR IGNORE plays_info 
+            SET play_count = play_count + 1, last_play = CURRENT_TIMESTAMP
+            WHERE video_id = $videoId AND username = $username
+          `,
+          {
+            $videoId: videoId,
+            $username: queuedItem.by,
+          }
+        );
+        console.log(
+          `Added new stat for video ${videoId} and user ${queuedItem.by}`
+        );
+      } catch (err) {
+        console.log("Error with stat recording. Ignoring it: ", err);
+      }
     } catch (err) {
       await new Promise((res) => {
         console.log(
@@ -195,51 +196,42 @@ class MusicPlayer {
     }
   }
 
-  getVideoInfo = (url: string) =>
-    new Promise<SavedInfo>(async (res, rej) => {
-      let videoId: string;
-      try {
-        videoId = ytdl.getURLVideoID(url);
-      } catch (err) {
-        rej("Bad URL input. Check your YouTube URL: " + url);
-        return;
+  getVideoInfo = async (url: string) => {
+    let videoId: string;
+    try {
+      videoId = ytdl.getURLVideoID(url);
+    } catch (err) {
+      throw new Error("Bad URL input. Check your YouTube URL: " + url);
+    }
+
+    const row = await this.db.getSync(
+      "select * from video_info where video_id = $videoId",
+      {
+        $videoId: videoId,
       }
+    );
 
-      this.db.get(
-        "select * from video_info where video_id = $videoId",
-        {
-          $videoId: videoId,
-        },
-        async (err, row) => {
-          if (err) {
-            rej(err);
-            return;
-          }
+    if (row) {
+      return JSON.parse(row.info);
+    }
 
-          if (row) {
-            res(JSON.parse(row.info));
-            return;
-          }
+    console.log(`Fetching video info: ${url}`);
+    const info = await ytdl.getInfo(url);
+    const savedInfo: SavedInfo = {
+      title: info.videoDetails.title,
+      ownerChannelName: info.videoDetails.ownerChannelName,
+      description: info.videoDetails.description,
+      lengthSeconds: info.videoDetails.lengthSeconds,
+      videoUrl: info.videoDetails.video_url,
+    };
 
-          console.log(`Fetching video info: ${url}`);
-          const info = await ytdl.getInfo(url);
-          const savedInfo: SavedInfo = {
-            title: info.videoDetails.title,
-            ownerChannelName: info.videoDetails.ownerChannelName,
-            description: info.videoDetails.description,
-            lengthSeconds: info.videoDetails.lengthSeconds,
-            videoUrl: info.videoDetails.video_url,
-          };
+    await this.db.runSync(
+      "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
+      { $videoId: videoId, $info: JSON.stringify(savedInfo) }
+    );
 
-          res(savedInfo);
-          this.db.run(
-            "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
-            { $videoId: videoId, $info: JSON.stringify(savedInfo) }
-          );
-          return;
-        }
-      );
-    });
+    return savedInfo;
+  };
 
   addSong(request: SongRequest) {
     console.log(`Adding song to the queue ${request.url}`);

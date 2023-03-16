@@ -61,8 +61,8 @@ export const playCommand = {
       try {
         info = await musicPlayer.getVideoInfo(url);
       } catch (err) {
-        console.error(err);
-        await interaction.editReply(`Error: ${err}`);
+        console.error("Error while getting info: ", err);
+        await interaction.editReply(`${err}`);
         return;
       }
       musicPlayer.addSong({ url, by: username });
