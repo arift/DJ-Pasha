@@ -154,9 +154,36 @@ class MusicPlayer {
 
       //play next song
       console.log(`Playing next song: ${queuedItem.url}`);
+      const videoId = ytdl.getURLVideoID(queuedItem.url);
       const filePath = await this.ensureSongCached(queuedItem.url);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
+      await new Promise<void>((res) =>
+        this.db.run(
+          `
+        INSERT OR IGNORE INTO plays_info (video_id, username, play_count)
+        VALUES ($videoId, $username, 0)
+      `,
+          {
+            $videoId: videoId,
+            $username: queuedItem.by,
+          },
+          () => {
+            res();
+          }
+        )
+      );
+      this.db.run(
+        `
+        UPDATE OR IGNORE plays_info 
+        SET play_count = play_count + 1, last_play = CURRENT_TIMESTAMP
+        WHERE video_id = $videoId AND username = $username
+       `,
+        {
+          $videoId: videoId,
+          $username: queuedItem.by,
+        }
+      );
     } catch (err) {
       await new Promise((res) => {
         console.log(

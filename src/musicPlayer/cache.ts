@@ -42,5 +42,13 @@ const db = new sqlite3.Database(DB_PATH);
 db.run(
   "CREATE TABLE IF NOT EXISTS video_info (video_id TEXT PRIMARY KEY, info TEXT, insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
 );
+db.run(`
+  CREATE TABLE IF NOT EXISTS plays_info (
+    video_id TEXT, 
+    username TEXT, 
+    play_count INTEGER, 
+    last_play DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
+    PRIMARY KEY (video_id, username)
+  )`);
 
 export { db, CACHE_PATH, STAGING_PATH };
