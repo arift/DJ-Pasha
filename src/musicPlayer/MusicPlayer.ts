@@ -358,20 +358,25 @@ class MusicPlayer {
     }
 
     let queueText: string;
+    let totalQueueSeconds: number = 0;
+    const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
     if (playListInfo.length) {
-      queueText = `${playListInfo
-        .map((info, idx) => `**${idx + 1}**: ${info.title} (*${info.by}*)`)
-        .join("\n")}`;
+      const queueLines = [];
+      playListInfo.forEach((info, idx) => {
+        queueLines.push(`**${idx + 1}**: ${info.title} (*${info.by}*)`);
+        totalQueueSeconds += Number(info.lengthSeconds);
+      });
+      embed.setDescription(queueLines.join("\n"));
+      embed.setFooter({
+        text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+      });
+    } else {
+      embed.setDescription("Queue is empty");
     }
 
     const toSend: MessageCreateOptions = {
       content: "",
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#33D7FF")
-          .setTitle("Next up:")
-          .setDescription(queueText ?? "Queue is empty"),
-      ],
+      embeds: [embed],
     };
     return toSend;
   }
