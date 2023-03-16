@@ -8,13 +8,17 @@ import {
 } from "discord.js";
 import { db } from "./cache";
 import MusicPlayer, { SavedInfo } from "./MusicPlayer";
-import musicPlayersByChannel from "./musicPlayersByChannel";
+import {
+  addMusicPlayer,
+  getMusicPlayer,
+  hasMusicPlayer,
+} from "./musicPlayersByChannel";
 
 const musicPlayerCheck = async (
   voiceChannel: VoiceBasedChannel,
   interaction: ChatInputCommandInteraction<CacheType>
 ) => {
-  if (!musicPlayersByChannel[voiceChannel.id]) {
+  if (!hasMusicPlayer(voiceChannel)) {
     await interaction.editReply(
       "You don't have any songs playing. Add songs to the queue with /play command."
     );
@@ -32,6 +36,7 @@ export const playCommand = {
     ),
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
     await interaction.deferReply();
+    const client = interaction.client;
     const username = interaction.user.username;
     const voiceChannel = (interaction.member as GuildMember).voice.channel;
     const textChannel = interaction.channel;
@@ -39,20 +44,19 @@ export const playCommand = {
 
     if (!voiceChannel) {
       await interaction.editReply(
-        `:warning: You must be in a voice channel to use DJPasha!`
+        `:warning: You must be in a voice channel to use DJ Pasha!`
       );
       return;
     }
     try {
-      if (!musicPlayersByChannel[voiceChannel.id]) {
-        musicPlayersByChannel[voiceChannel.id] = new MusicPlayer(
+      if (!hasMusicPlayer(voiceChannel)) {
+        addMusicPlayer(
           voiceChannel,
-          textChannel,
-          db
+          new MusicPlayer(voiceChannel, textChannel, db, client)
         );
       }
 
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       let info: SavedInfo;
       try {
         info = await musicPlayer.getVideoInfo(url);
@@ -91,7 +95,8 @@ export const queueCommand = {
       await interaction.deferReply();
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+
+      const musicPlayer = getMusicPlayer(voiceChannel);
       await interaction.editReply(await musicPlayer.getQueueStatus());
     } catch (err) {
       console.error(err);
@@ -125,9 +130,10 @@ export const moveCommand = {
       await interaction.deferReply();
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
+
       const from = interaction.options.getNumber("from");
       const to = interaction.options.getNumber("to", false) ?? 1;
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       musicPlayer.move(from, to);
       const msgOptions = await musicPlayer.getQueueStatus();
       msgOptions.content = `Moved song in position ${from} to ${to}`;
@@ -157,7 +163,7 @@ export const removeCommand = {
       const queuePosition = interaction.options.getNumber("position");
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
 
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       musicPlayer.remove(queuePosition);
       const msgOptions = await musicPlayer.getQueueStatus();
       msgOptions.content = `Removed song from queue position ${queuePosition}`;
@@ -180,7 +186,7 @@ export const skipCommand = {
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
 
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       await musicPlayer.skip();
       await interaction.editReply("Skipped song.");
     } catch (err) {
@@ -201,7 +207,7 @@ export const shuffleCommand = {
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
 
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       musicPlayer.shuffle();
 
       const msgOptions = await musicPlayer.getQueueStatus();
@@ -225,7 +231,7 @@ export const playingCommand = {
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
 
-      const musicPlayer = musicPlayersByChannel[voiceChannel.id];
+      const musicPlayer = getMusicPlayer(voiceChannel);
       await interaction.editReply(await musicPlayer.getNowPlayingStatus());
     } catch (err) {
       await interaction.editReply(err.message);
@@ -269,6 +275,3 @@ export const commands = {
   [skipCommand.data.name]: skipCommand,
   [help.data.name]: help,
 };
-function getVideoInfo(url: string) {
-  throw new Error("Function not implemented.");
-}

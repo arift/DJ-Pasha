@@ -7,16 +7,18 @@ import {
   VoiceConnection,
 } from "@discordjs/voice";
 import {
+  Client,
   EmbedBuilder,
   GuildTextBasedChannel,
   MessageCreateOptions,
   VoiceBasedChannel,
+  VoiceState,
 } from "discord.js";
 import fs from "fs";
 import sqlite3 from "sqlite3";
 import ytdl from "ytdl-core";
 import { CACHE_PATH, STAGING_PATH } from "./cache";
-import musicPlayersByChannel from "./musicPlayersByChannel";
+import { removeMusicPlayer } from "./musicPlayersByChannel";
 import { shuffle, toHoursAndMinutes } from "./utils";
 
 export type SavedInfo = {
@@ -33,22 +35,31 @@ class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
   textChannel: GuildTextBasedChannel;
   audioPlayer: AudioPlayer;
+  client: Client;
   voiceConnection: VoiceConnection;
   queueu: Array<SongRequest>;
   playing = false;
   nowPlaying: SongRequest | null = null;
   db: sqlite3.Database;
-  hydraterInterval: NodeJS.Timer;
-  disconnectTimeout: NodeJS.Timeout;
-
+  hydraterInterval: NodeJS.Timer | null;
+  disconnectTimeout: NodeJS.Timeout | null;
+  onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
   constructor(
     voiceChannel: VoiceBasedChannel,
     textChannel: GuildTextBasedChannel,
-    db: sqlite3.Database
+    db: sqlite3.Database,
+    client: Client
   ) {
+    console.log(
+      "Starting a new client for ",
+      voiceChannel.name,
+      " in ",
+      voiceChannel.guild.name
+    );
     this.voiceChannel = voiceChannel;
     this.textChannel = textChannel;
     this.db = db;
+    this.client = client;
     this.voiceConnection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,
@@ -58,21 +69,68 @@ class MusicPlayer {
     this.audioPlayer = createAudioPlayer();
     this.voiceConnection.subscribe(this.audioPlayer);
     const musicPlayer = this;
-    this.hydraterInterval = this.startHydraterInterval();
-
     this.audioPlayer.on(AudioPlayerStatus.Idle, async () => {
       console.log("In idle, playing next song");
       await musicPlayer.playNextSong();
     });
+    this.onVoiceStateUpdate = () => {
+      if (this.voiceChannel.members.size < 2) {
+        console.log("No one is in server, starting disconnect timer.");
+        this.startDiconnectTimeout();
+        this.stopHydrateInterval();
+      } else if (this.playing) {
+        this.stopDisconnectTimeout();
+        this.startHydrateInterval();
+      }
+    };
+    this.client.on("voiceStateUpdate", this.onVoiceStateUpdate);
   }
 
-  startHydraterInterval() {
-    return setInterval(() => {
+  startDiconnectTimeout = () => {
+    if (this.disconnectTimeout) {
+      return;
+    }
+    console.log("Starting disconnect timeout.");
+    this.disconnectTimeout = setTimeout(() => {
+      console.log("Disconnecting. Clearing everything up...");
+      this.voiceConnection.disconnect();
+      this.voiceConnection.destroy();
+      this.audioPlayer.removeAllListeners();
+      this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
+      this.stopHydrateInterval();
+      removeMusicPlayer(this.voiceChannel);
+    }, 6000);
+  };
+
+  stopDisconnectTimeout = () => {
+    if (!this.disconnectTimeout) {
+      return;
+    }
+    console.log("Stopping disconnect timeout.");
+    clearTimeout(this.disconnectTimeout);
+    this.disconnectTimeout = null;
+  };
+
+  startHydrateInterval = () => {
+    if (this.hydraterInterval) {
+      return;
+    }
+    console.log("Startting hyrdate interval.");
+    this.hydraterInterval = setInterval(() => {
       if (this.queueu.length > 0) {
         this.ensureSongCached(this.queueu[0].url);
       }
     }, 5000);
-  }
+  };
+
+  stopHydrateInterval = () => {
+    if (!this.hydraterInterval) {
+      return;
+    }
+    console.log("Stopping hydrate interval.");
+    clearInterval(this.hydraterInterval);
+    this.hydraterInterval = null;
+  };
 
   getVideoInfo = (url: string) =>
     new Promise<SavedInfo>(async (res, rej) => {
@@ -84,7 +142,6 @@ class MusicPlayer {
         return;
       }
 
-      console.log(`Getting video info for: ${url}`);
       this.db.get(
         "select * from video_info where video_id = $videoId",
         {
@@ -97,7 +154,6 @@ class MusicPlayer {
           }
 
           if (row) {
-            console.log(`Got video info from cache: ${url}`);
             res(JSON.parse(row.info));
             return;
           }
@@ -156,7 +212,8 @@ class MusicPlayer {
             fs.renameSync(stagingPath, cachedFilePath);
             res(cachedFilePath);
           } catch (err) {
-            console.error(err);
+            console.error("Rename error: ", err);
+            rej();
           }
         });
       }
@@ -193,52 +250,42 @@ class MusicPlayer {
   }
 
   async skip() {
-    this.audioPlayer.stop(true);
-    await this.playNextSong();
+    console.log("Skipping song...");
+    this.audioPlayer.stop();
   }
 
   async playNextSong() {
     const queuedItem = this.queueu.shift();
-
-    //clean up and start the disconnect timer, since we're out of songs
-    if (!queuedItem) {
-      console.log("Out of songs. Starting disconnect timer.");
-      clearInterval(this.hydraterInterval);
-      this.hydraterInterval = null;
-      this.playing = false;
-      this.nowPlaying = null;
-      clearTimeout(this.disconnectTimeout);
-      this.disconnectTimeout = setTimeout(() => {
-        this.voiceConnection.disconnect();
-        this.voiceConnection.destroy();
-        musicPlayersByChannel[this.voiceChannel.id] = null;
-      }, 60000);
-      this.textChannel.send(
-        "No more songs in the queue. DJ Pasha will disconnect in 60 seconds."
-      );
-      return;
-    }
-
-    //ensure we're in playing state
-    if (this.disconnectTimeout) {
-      clearTimeout(this.disconnectTimeout);
-      this.disconnectTimeout = null;
-    }
-    if (!this.playing) {
-      this.playing = true;
-    }
-    if (!this.hydraterInterval) {
-      this.hydraterInterval = this.startHydraterInterval();
-    }
-
-    //play next song
     try {
+      //clean up and start the disconnect timer, since we're out of songs
+      if (!queuedItem) {
+        this.startDiconnectTimeout();
+        this.stopHydrateInterval();
+        this.playing = false;
+        this.nowPlaying = null;
+        this.textChannel.send(
+          "No more songs in the queue. DJ Pasha will disconnect in 60 seconds."
+        );
+        return;
+      }
+      //ensure we're in playing state
+      this.stopDisconnectTimeout();
+      this.playing = true;
+      this.nowPlaying = queuedItem;
+      this.startHydrateInterval();
+
+      //play next song
       console.log(`Playing next song: ${queuedItem.url}`);
       const filePath = await this.ensureSongCached(queuedItem.url);
-      this.nowPlaying = queuedItem;
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
     } catch (err) {
+      await new Promise((res) => {
+        console.log(
+          "Problem while playing song. Waiting five seconds before attempting agian..."
+        );
+        setTimeout(res, 5000);
+      });
       await this.playNextSong();
     }
   }
