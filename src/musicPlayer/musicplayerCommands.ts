@@ -66,9 +66,11 @@ export const playCommand = {
         return;
       }
       musicPlayer.addSong({ url, by: username });
-      await interaction.editReply(
-        `:notes: Added **${info.title}** to the queue.`
-      );
+      let msg = `:notes: Added **${info.title}** to the queue. `;
+      if (musicPlayer.playing && musicPlayer.queueu.length > 0) {
+        msg += `Queue size: ${musicPlayer.queueu.length}.`;
+      }
+      await interaction.editReply(msg);
 
       if (!musicPlayer.playing) {
         try {
