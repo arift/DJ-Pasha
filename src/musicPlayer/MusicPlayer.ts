@@ -99,7 +99,7 @@ class MusicPlayer {
       this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
       this.stopHydrateInterval();
       removeMusicPlayer(this.voiceChannel);
-    }, 6000);
+    }, 60000);
   };
 
   stopDisconnectTimeout = () => {
@@ -131,6 +131,42 @@ class MusicPlayer {
     clearInterval(this.hydraterInterval);
     this.hydraterInterval = null;
   };
+
+  async playNextSong() {
+    const queuedItem = this.queueu.shift();
+    try {
+      //clean up and start the disconnect timer, since we're out of songs
+      if (!queuedItem) {
+        this.startDiconnectTimeout();
+        this.stopHydrateInterval();
+        this.playing = false;
+        this.nowPlaying = null;
+        this.textChannel.send(
+          "No more songs in the queue. DJ Pasha will disconnect in 60 seconds."
+        );
+        return;
+      }
+      //ensure we're in playing state
+      this.stopDisconnectTimeout();
+      this.playing = true;
+      this.nowPlaying = queuedItem;
+      this.startHydrateInterval();
+
+      //play next song
+      console.log(`Playing next song: ${queuedItem.url}`);
+      const filePath = await this.ensureSongCached(queuedItem.url);
+      this.audioPlayer.play(createAudioResource(filePath));
+      this.textChannel.send(await this.getNowPlayingStatus());
+    } catch (err) {
+      await new Promise((res) => {
+        console.log(
+          "Problem while playing song. Waiting five seconds before attempting agian..."
+        );
+        setTimeout(res, 5000);
+      });
+      await this.playNextSong();
+    }
+  }
 
   getVideoInfo = (url: string) =>
     new Promise<SavedInfo>(async (res, rej) => {
@@ -171,16 +207,7 @@ class MusicPlayer {
           res(savedInfo);
           this.db.run(
             "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
-            { $videoId: videoId, $info: JSON.stringify(savedInfo) },
-            async () => {
-              try {
-                res(await this.getVideoInfo(url));
-                return;
-              } catch (err) {
-                rej("Problem getting the video info: " + url);
-                return;
-              }
-            }
+            { $videoId: videoId, $info: JSON.stringify(savedInfo) }
           );
           return;
         }
@@ -195,27 +222,38 @@ class MusicPlayer {
   ensureSongCached = (url: string) =>
     new Promise<string>((res, rej) => {
       const videoId = ytdl.getURLVideoID(url);
-      const cachedFilePath = `${CACHE_PATH}/${videoId}.webm`;
+      const cachedFilePath = `${CACHE_PATH}/${videoId}`;
       if (fs.existsSync(cachedFilePath)) {
         res(cachedFilePath);
       } else {
-        const t = Date.now();
-        console.log(`Song not in cache, downloading it: ${url}`);
-        const ytStream = ytdl(url, { filter: "audioonly", quality: "251" });
-        const stagingPath = `${STAGING_PATH}/${videoId}.webm`;
-        ytStream.pipe(fs.createWriteStream(stagingPath));
-        ytStream.on("end", (args) => {
-          console.log(
-            `Song downloaded it in ${(Date.now() - t) / 1000} seconds: ${url}`
-          );
-          try {
-            fs.renameSync(stagingPath, cachedFilePath);
-            res(cachedFilePath);
-          } catch (err) {
-            console.error("Rename error: ", err);
-            rej();
-          }
-        });
+        try {
+          const t = Date.now();
+          console.log(`Song not in cache, downloading it: ${url}`);
+          const ytStream = ytdl(url, {
+            filter: "audioonly",
+            quality: "highestaudio",
+          });
+          const stagingPath = `${STAGING_PATH}/${videoId}`;
+          ytStream.pipe(fs.createWriteStream(stagingPath));
+          ytStream.on("error", (err) => {
+            rej(err);
+          });
+          ytStream.on("end", (args) => {
+            console.log(
+              `Song downloaded it in ${(Date.now() - t) / 1000} seconds: ${url}`
+            );
+            try {
+              fs.renameSync(stagingPath, cachedFilePath);
+              res(cachedFilePath);
+            } catch (err) {
+              console.error("Rename error: ", err);
+              rej();
+            }
+          });
+        } catch (err) {
+          console.error("Error caching song: ", err);
+          rej();
+        }
       }
     });
 
@@ -252,42 +290,6 @@ class MusicPlayer {
   async skip() {
     console.log("Skipping song...");
     this.audioPlayer.stop();
-  }
-
-  async playNextSong() {
-    const queuedItem = this.queueu.shift();
-    try {
-      //clean up and start the disconnect timer, since we're out of songs
-      if (!queuedItem) {
-        this.startDiconnectTimeout();
-        this.stopHydrateInterval();
-        this.playing = false;
-        this.nowPlaying = null;
-        this.textChannel.send(
-          "No more songs in the queue. DJ Pasha will disconnect in 60 seconds."
-        );
-        return;
-      }
-      //ensure we're in playing state
-      this.stopDisconnectTimeout();
-      this.playing = true;
-      this.nowPlaying = queuedItem;
-      this.startHydrateInterval();
-
-      //play next song
-      console.log(`Playing next song: ${queuedItem.url}`);
-      const filePath = await this.ensureSongCached(queuedItem.url);
-      this.audioPlayer.play(createAudioResource(filePath));
-      this.textChannel.send(await this.getNowPlayingStatus());
-    } catch (err) {
-      await new Promise((res) => {
-        console.log(
-          "Problem while playing song. Waiting five seconds before attempting agian..."
-        );
-        setTimeout(res, 5000);
-      });
-      await this.playNextSong();
-    }
   }
 
   async getNowPlayingStatus() {
