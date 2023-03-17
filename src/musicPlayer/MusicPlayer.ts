@@ -354,21 +354,25 @@ class MusicPlayer {
 
   async getQueueStatus() {
     const playListInfo: Array<SavedInfo & { by: SongRequest["by"] }> = [];
-    for (let idx = 0; idx < this.queueu.length; idx++) {
+    for (let idx = 0; idx < this.queueu.length && idx < 25; idx++) {
       const songRequest = this.queueu[idx];
       const info = await this.getVideoInfo(songRequest.url);
       playListInfo.push({ ...info, by: songRequest.by });
     }
 
-    let queueText: string;
     let totalQueueSeconds: number = 0;
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
+
     if (playListInfo.length) {
       const queueLines = [];
       playListInfo.forEach((info, idx) => {
         queueLines.push(`**${idx + 1}**: ${info.title} (*${info.by}*)`);
         totalQueueSeconds += Number(info.lengthSeconds);
       });
+      const hiddenSongs = this.queueu.length - playListInfo.length;
+      if (hiddenSongs > 0) {
+        queueLines.push(`...and ${hiddenSongs} more.`);
+      }
       embed.setDescription(queueLines.join("\n"));
       embed.setFooter({
         text: `Total queue time: \`${toHoursAndMinutes(totalQueueSeconds)}\``,
