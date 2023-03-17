@@ -160,19 +160,8 @@ class MusicPlayer {
       try {
         await this.db.runSync(
           `
-            INSERT OR IGNORE INTO plays_info (video_id, username, play_count)
-            VALUES ($videoId, $username, 0)
-          `,
-          {
-            $videoId: videoId,
-            $username: queuedItem.by,
-          }
-        );
-        await this.db.runSync(
-          `
-            UPDATE OR IGNORE plays_info 
-            SET play_count = play_count + 1, last_play = CURRENT_TIMESTAMP
-            WHERE video_id = $videoId AND username = $username
+            INSERT OR IGNORE INTO plays (video_id, username)
+            VALUES ($videoId, $username)
           `,
           {
             $videoId: videoId,
@@ -183,7 +172,7 @@ class MusicPlayer {
           `Added new stat for video ${videoId} and user ${queuedItem.by}`
         );
       } catch (err) {
-        console.log("Error with stat recording. Ignoring it: ", err);
+        console.error("Error with stat recording. Ignoring it: ", err);
       }
     } catch (err) {
       await new Promise((res) => {
