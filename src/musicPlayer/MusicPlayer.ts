@@ -216,7 +216,13 @@ class MusicPlayer {
     }
 
     console.log(`Fetching video info: ${url}`);
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, {
+      requestOptions: {
+        headers: {
+          cookie: process.env.COOKIE,
+        },
+      },
+    });
     const savedInfo: SavedInfo = {
       title: info.videoDetails.title,
       ownerChannelName: info.videoDetails.ownerChannelName,
@@ -251,6 +257,11 @@ class MusicPlayer {
           const ytStream = ytdl(url, {
             filter: "audioonly",
             quality: "highestaudio",
+            requestOptions: {
+              headers: {
+                cookie: process.env.COOKIE,
+              },
+            },
           });
           const stagingPath = `${STAGING_PATH}/${videoId}`;
           ytStream.pipe(fs.createWriteStream(stagingPath));
@@ -360,7 +371,7 @@ class MusicPlayer {
       });
       embed.setDescription(queueLines.join("\n"));
       embed.setFooter({
-        text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+        text: `Total queue time: \`${toHoursAndMinutes(totalQueueSeconds)}\``,
       });
     } else {
       embed.setDescription("Queue is empty");

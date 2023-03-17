@@ -6,6 +6,7 @@ import {
   SlashCommandBuilder,
   VoiceBasedChannel,
 } from "discord.js";
+import ytpl from "ytpl";
 import { db } from "./cache";
 import MusicPlayer, { SavedInfo } from "./MusicPlayer";
 import {
@@ -57,20 +58,39 @@ export const playCommand = {
       }
 
       const musicPlayer = getMusicPlayer(voiceChannel);
-      let info: SavedInfo;
-      try {
-        info = await musicPlayer.getVideoInfo(url);
-      } catch (err) {
-        console.error("Error while getting info: ", err);
-        await interaction.editReply(`${err}`);
-        return;
+      if (ytpl.validateID(url)) {
+        const playlist = await ytpl(url, {
+          requestOptions: {
+            headers: {
+              cookie: process.env.COOKIE,
+            },
+          },
+        });
+        playlist.items.forEach((item) => {
+          musicPlayer.addSong({
+            url: item.shortUrl,
+            by: username,
+          });
+        });
+        await interaction.editReply(
+          `:notes: Added **${playlist.title}** playlist to the queue with ${playlist.items.length} songs.`
+        );
+      } else {
+        let info: SavedInfo;
+        try {
+          info = await musicPlayer.getVideoInfo(url);
+        } catch (err) {
+          console.error("Error while getting info: ", err);
+          await interaction.editReply(`${err}`);
+          return;
+        }
+        musicPlayer.addSong({ url, by: username });
+        let msg = `:notes: Added **${info.title}** to the queue. `;
+        if (musicPlayer.playing && musicPlayer.queueu.length > 0) {
+          msg += `Place in queue: ${musicPlayer.queueu.length}.`;
+        }
+        await interaction.editReply(msg);
       }
-      musicPlayer.addSong({ url, by: username });
-      let msg = `:notes: Added **${info.title}** to the queue. `;
-      if (musicPlayer.playing && musicPlayer.queueu.length > 0) {
-        msg += `Place in queue: ${musicPlayer.queueu.length}.`;
-      }
-      await interaction.editReply(msg);
 
       if (!musicPlayer.playing) {
         try {
