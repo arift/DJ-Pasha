@@ -7,6 +7,9 @@ import {
   VoiceConnection,
 } from "@discordjs/voice";
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
   EmbedBuilder,
   GuildTextBasedChannel,
@@ -14,13 +17,11 @@ import {
   VoiceBasedChannel,
   VoiceState,
 } from "discord.js";
-import ytdl from "ytdl-core";
 import { getDb } from "./db";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
 import { DB_PATH } from "./paths";
 import { getInfo, getInfos, getSong } from "./processor";
 import Queue, { QueueItem } from "./Queue";
-import { SavedInfo } from "./types";
 import { toHoursAndMinutes } from "./utils";
 
 const db = getDb(DB_PATH);
@@ -73,7 +74,7 @@ class MusicPlayer {
     this.queue = new Queue({
       onChange: (queue) => {
         if (queue.length > 0 && this.playing) {
-          this.ensureSongCached(queue[0].url);
+          getSong(queue[0].id);
         }
       },
     });
@@ -88,7 +89,7 @@ class MusicPlayer {
       if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
-      } else if (this.playing) {
+      } else {
         this.stopDisconnectTimeout();
       }
     };
@@ -120,6 +121,7 @@ class MusicPlayer {
   };
 
   async playNextSong() {
+    this.playing = true; //this needs to come before pop in order to make sure the onChange properly caches the next song since it needs playing=true
     const nextItem = this.queue.pop();
     try {
       //clean up and start the disconnect timer, since we're out of songs
@@ -134,13 +136,11 @@ class MusicPlayer {
       }
       //ensure we're in playing state
       this.stopDisconnectTimeout();
-      this.playing = true;
       this.nowPlaying = nextItem;
 
       //play next song
-      console.log(`Playing next song: ${nextItem.url}`);
-      const videoId = ytdl.getURLVideoID(nextItem.url);
-      const filePath = await this.ensureSongCached(nextItem.url);
+      console.log(`Playing next song: ${nextItem.id}`);
+      const filePath = await getSong(nextItem.id);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
@@ -150,12 +150,12 @@ class MusicPlayer {
             VALUES ($videoId, $username)
           `,
           {
-            $videoId: videoId,
+            $videoId: nextItem.id,
             $username: nextItem.by,
           }
         );
         console.log(
-          `Added new stat for video ${videoId} and user ${nextItem.by}`
+          `Added new stat for video ${nextItem.id} and user ${nextItem.by}`
         );
       } catch (err) {
         console.error("Error with stat recording. Ignoring it: ", err);
@@ -171,25 +171,10 @@ class MusicPlayer {
     }
   }
 
-  getVideoInfo = async (url: string) => {
-    let videoId: string;
-    try {
-      videoId = ytdl.getURLVideoID(url);
-    } catch (err) {
-      throw new Error("Bad URL input. Check your YouTube URL: " + url);
-    }
-    return await getInfo(videoId);
-  };
-
   addSong(request: QueueItem | Array<QueueItem>) {
     console.log(`Adding to queue: `, request);
     this.queue.enqueue(request);
   }
-
-  ensureSongCached = async (url: string) => {
-    const videoId = ytdl.getURLVideoID(url);
-    return await getSong(videoId);
-  };
 
   move(from: number, to: number = 1) {
     const fromIdx = from - 1;
@@ -227,7 +212,7 @@ class MusicPlayer {
       return "";
     }
     const songRequest = this.nowPlaying;
-    const nowPlayingInfo = await this.getVideoInfo(songRequest.url);
+    const nowPlayingInfo = await getInfo(songRequest.url);
     const nowPlayingText = `
     **${nowPlayingInfo.title} - ${nowPlayingInfo.ownerChannelName}**
     
@@ -247,46 +232,81 @@ class MusicPlayer {
     return toSend;
   }
 
-  async getQueueStatus() {
-    const queueItemPage: Array<QueueItem> = [];
-    for (let idx = 0; idx < this.queue.size() && idx < 10; idx++) {
-      queueItemPage.push(this.queue.get(idx));
-    }
-    const savedInfos = await getInfos(
-      queueItemPage.map((item) => ytdl.getVideoID(item.url))
-    );
+  async getQueueStatus(startRow = 0, pageSize = 10) {
+    const toSend: MessageCreateOptions = {
+      content: "",
+      embeds: [],
+      components: [],
+    };
 
-    const playListInfo: Array<SavedInfo & { by: QueueItem["by"] }> =
-      savedInfos.map((info, idx) => ({
-        ...info,
-        by: queueItemPage[idx].by,
-      }));
+    console.log("Queue start row", startRow);
+    const totalQueueSize = this.queue.size();
+    const lastRowIdx =
+      totalQueueSize < pageSize + startRow
+        ? totalQueueSize
+        : pageSize + startRow;
+
+    const queueItemPage = this.queue.slice(startRow, lastRowIdx);
+
+    const playlistInfos = await getInfos(queueItemPage.map((item) => item.id));
 
     let totalQueueSeconds: number = 0;
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
 
-    if (playListInfo.length) {
+    if (playlistInfos.length) {
       const queueLines = [];
-      playListInfo.forEach((info, idx) => {
-        queueLines.push(`**${idx + 1}**: ${info.title} (*${info.by}*)`);
+      playlistInfos.forEach((info, idx) => {
+        queueLines.push(
+          `**${startRow + idx + 1}**: ${info.title} (*${
+            queueItemPage[idx].by
+          }*)`
+        );
         totalQueueSeconds += Number(info.lengthSeconds);
       });
-      const hiddenSongs = this.queue.size() - playListInfo.length;
-      if (hiddenSongs > 0) {
-        queueLines.push(`...and ${hiddenSongs} more.`);
+
+      const hiddenSongs = this.queue.size() - lastRowIdx;
+
+      //figure out if we need pagination
+      if (startRow > 0 || hiddenSongs > 0) {
+        //has page info
+        console.log("Has hidden songs, showing pagination");
+        const nextButton = new ButtonBuilder()
+          .setCustomId(`--queuePage=${lastRowIdx}`)
+          .setDisabled(hiddenSongs === 0)
+          .setStyle(ButtonStyle.Primary)
+          .setLabel(`Next`);
+
+        const prevButton = new ButtonBuilder()
+          .setCustomId(`--queuePage=${startRow - pageSize}`)
+          .setDisabled(startRow === 0)
+          .setStyle(ButtonStyle.Primary)
+          .setLabel("Previous");
+
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          prevButton,
+          nextButton
+        );
+        toSend.components.push(actionRow);
+        const page = startRow / pageSize + 1;
+        const lastPage = Math.ceil(totalQueueSize / pageSize);
+        embed.setFooter({
+          text: `Page ${page}/${lastPage}\nPage queue time: ${toHoursAndMinutes(
+            totalQueueSeconds
+          )}`,
+        });
+      } else {
+        //no page info
+        embed.setFooter({
+          text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+        });
       }
+
       embed.setDescription(queueLines.join("\n"));
-      embed.setFooter({
-        text: `Total queue time: \`${toHoursAndMinutes(totalQueueSeconds)}\``,
-      });
     } else {
       embed.setDescription("Queue is empty");
     }
+    toSend.embeds.push(embed);
 
-    const toSend: MessageCreateOptions = {
-      content: "",
-      embeds: [embed],
-    };
     return toSend;
   }
 }

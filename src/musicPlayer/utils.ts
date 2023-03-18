@@ -33,14 +33,18 @@ export const random = (min: number, max: number) => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
-export const getArgv = (argument: string) => {
-  const argv = process.argv.find((val, index) => {
+export const getArg = (argument: string, options: Array<any>) => {
+  const arg = options.find((val) => {
     const splitVal = val.split("=");
     return splitVal.length > 1 && splitVal[0].trim() === argument;
   });
-  if (!argv) {
+  if (!arg) {
     return null;
   }
 
-  return argv.split("=").slice(1).join("=");
+  return arg.split("=").slice(1).join("=");
+};
+
+export const getArgv = (argument: string) => {
+  return getArg(argument, process.argv);
 };

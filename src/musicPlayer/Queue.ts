@@ -1,6 +1,7 @@
 import { shuffle } from "./utils";
 
 export type QueueItem = {
+  id: string;
   url: string;
   by: string;
 };
@@ -23,6 +24,10 @@ class Queue {
 
   get(idx: number) {
     return this.queue[idx];
+  }
+
+  slice(start?: number, end?: number) {
+    return this.queue.slice(start, end);
   }
 
   pop() {

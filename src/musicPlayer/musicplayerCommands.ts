@@ -1,4 +1,5 @@
 import {
+  ButtonInteraction,
   CacheType,
   ChatInputCommandInteraction,
   EmbedBuilder,
@@ -14,12 +15,12 @@ import {
   getMusicPlayer,
   hasMusicPlayer,
 } from "./musicPlayersByChannel";
-import { getPlaylistInfo } from "./processor";
+import { getInfo, getPlaylistInfo } from "./processor";
 import { SavedInfo } from "./types";
 
 const musicPlayerCheck = async (
   voiceChannel: VoiceBasedChannel,
-  interaction: ChatInputCommandInteraction<CacheType>
+  interaction: ChatInputCommandInteraction<CacheType> | ButtonInteraction
 ) => {
   if (!hasMusicPlayer(voiceChannel)) {
     await interaction.editReply(
@@ -67,6 +68,7 @@ export const playCommand = {
 
         musicPlayer.addSong(
           playlist.items.map((item) => ({
+            id: ytdl.getVideoID(item.shortUrl),
             url: item.shortUrl,
             by: username,
           }))
@@ -77,15 +79,16 @@ export const playCommand = {
         );
       } else if (ytdl.validateURL(url)) {
         //single song
+        const id = ytdl.getVideoID(url);
         let info: SavedInfo;
         try {
-          info = await musicPlayer.getVideoInfo(url);
+          info = await getInfo(id);
         } catch (err) {
           console.error("Error while getting info: ", err);
           await interaction.editReply(`${err}`);
           return;
         }
-        musicPlayer.addSong({ url, by: username });
+        musicPlayer.addSong({ id, url, by: username });
         let msg = `:notes: Added **${info.title}** to the queue. `;
         if (musicPlayer.playing && musicPlayer.queue.size() > 0) {
           msg += `Place in queue: ${musicPlayer.queue.size()}.`;
@@ -130,6 +133,23 @@ export const queueCommand = {
       await interaction.editReply(`Error: ${err}`);
     }
   },
+};
+
+export const queuePageCommand = async (
+  interaction: ButtonInteraction,
+  startRow: number
+) => {
+  try {
+    await interaction.deferReply();
+    const voiceChannel = (interaction.member as GuildMember).voice.channel;
+    if (await musicPlayerCheck(voiceChannel, interaction)) return;
+
+    const musicPlayer = getMusicPlayer(voiceChannel);
+    await interaction.editReply(await musicPlayer.getQueueStatus(startRow));
+  } catch (err) {
+    console.error(err);
+    await interaction.editReply(`Error: ${err}`);
+  }
 };
 
 export const moveCommand = {
