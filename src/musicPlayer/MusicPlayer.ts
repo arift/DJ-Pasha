@@ -18,7 +18,8 @@ import fs from "fs";
 import ytdl from "ytdl-core";
 import { CACHE_PATH, Database, STAGING_PATH } from "./cache";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
-import { shuffle, toHoursAndMinutes } from "./utils";
+import Queue, { QueueItem } from "./Queue";
+import { toHoursAndMinutes } from "./utils";
 
 export type SavedInfo = {
   title: string;
@@ -28,17 +29,15 @@ export type SavedInfo = {
   videoUrl: string;
 };
 
-type SongRequest = { url: string; by: string };
-
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
   textChannel: GuildTextBasedChannel;
   audioPlayer: AudioPlayer;
   client: Client;
   voiceConnection: VoiceConnection;
-  queueu: Array<SongRequest>;
+  queue: Queue;
   playing = false;
-  nowPlaying: SongRequest | null = null;
+  nowPlaying: QueueItem | null = null;
   db: Database;
   hydraterInterval: NodeJS.Timer | null;
   disconnectTimeout: NodeJS.Timeout | null;
@@ -64,7 +63,13 @@ class MusicPlayer {
       guildId: voiceChannel.guild.id,
       adapterCreator: voiceChannel.guild.voiceAdapterCreator,
     });
-    this.queueu = [];
+    this.queue = new Queue({
+      onChange: (queue) => {
+        if (queue.length > 0 && this.playing) {
+          this.ensureSongCached(queue[0].url);
+        }
+      },
+    });
     this.audioPlayer = createAudioPlayer();
     this.voiceConnection.subscribe(this.audioPlayer);
     const musicPlayer = this;
@@ -76,10 +81,8 @@ class MusicPlayer {
       if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
-        this.stopHydrateInterval();
       } else if (this.playing) {
         this.stopDisconnectTimeout();
-        this.startHydrateInterval();
       }
     };
     this.client.on("voiceStateUpdate", this.onVoiceStateUpdate);
@@ -96,7 +99,6 @@ class MusicPlayer {
       this.voiceConnection.destroy();
       this.audioPlayer.removeAllListeners();
       this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
-      this.stopHydrateInterval();
       removeMusicPlayer(this.voiceChannel);
     }, 60000);
   };
@@ -110,34 +112,12 @@ class MusicPlayer {
     this.disconnectTimeout = null;
   };
 
-  startHydrateInterval = () => {
-    if (this.hydraterInterval) {
-      return;
-    }
-    console.log("Startting hyrdate interval.");
-    this.hydraterInterval = setInterval(() => {
-      if (this.queueu.length > 0) {
-        this.ensureSongCached(this.queueu[0].url);
-      }
-    }, 5000);
-  };
-
-  stopHydrateInterval = () => {
-    if (!this.hydraterInterval) {
-      return;
-    }
-    console.log("Stopping hydrate interval.");
-    clearInterval(this.hydraterInterval);
-    this.hydraterInterval = null;
-  };
-
   async playNextSong() {
-    const queuedItem = this.queueu.shift();
+    const nextItem = this.queue.pop();
     try {
       //clean up and start the disconnect timer, since we're out of songs
-      if (!queuedItem) {
+      if (!nextItem) {
         this.startDiconnectTimeout();
-        this.stopHydrateInterval();
         this.playing = false;
         this.nowPlaying = null;
         this.textChannel.send(
@@ -148,13 +128,12 @@ class MusicPlayer {
       //ensure we're in playing state
       this.stopDisconnectTimeout();
       this.playing = true;
-      this.nowPlaying = queuedItem;
-      this.startHydrateInterval();
+      this.nowPlaying = nextItem;
 
       //play next song
-      console.log(`Playing next song: ${queuedItem.url}`);
-      const videoId = ytdl.getURLVideoID(queuedItem.url);
-      const filePath = await this.ensureSongCached(queuedItem.url);
+      console.log(`Playing next song: ${nextItem.url}`);
+      const videoId = ytdl.getURLVideoID(nextItem.url);
+      const filePath = await this.ensureSongCached(nextItem.url);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
@@ -165,11 +144,11 @@ class MusicPlayer {
           `,
           {
             $videoId: videoId,
-            $username: queuedItem.by,
+            $username: nextItem.by,
           }
         );
         console.log(
-          `Added new stat for video ${videoId} and user ${queuedItem.by}`
+          `Added new stat for video ${videoId} and user ${nextItem.by}`
         );
       } catch (err) {
         console.error("Error with stat recording. Ignoring it: ", err);
@@ -228,9 +207,9 @@ class MusicPlayer {
     return savedInfo;
   };
 
-  addSong(request: SongRequest) {
+  addSong(request: QueueItem) {
     console.log(`Adding song to the queue ${request.url}`);
-    this.queueu.push(request);
+    this.queue.enqueue(request);
   }
 
   ensureSongCached = (url: string) =>
@@ -284,31 +263,27 @@ class MusicPlayer {
   move(from: number, to: number = 1) {
     const fromIdx = from - 1;
     const toIdx = to - 1;
-    if (
-      to < 1 ||
-      from < 1 ||
-      from > this.queueu.length ||
-      to > this.queueu.length
-    ) {
+    try {
+      this.queue.move(fromIdx, toIdx);
+    } catch (err) {
       throw new Error(
-        `Out of bounds move request. From: ${from}, to: ${to}, queue size: ${this.queueu.length}`
+        `Error move request. From: ${from}, to: ${to}, queue size: ${this.queue.size()}`
       );
     }
-    this.queueu.splice(toIdx, 0, this.queueu.splice(fromIdx, 1)[0]);
   }
 
   remove(position: number) {
-    if (position > this.queueu.length) {
+    if (position > this.queue.size()) {
       throw new Error(
-        `Out of bounds remove request. Position: ${position}, queue size: ${this.queueu.length}`
+        `Out of bounds remove request. Position: ${position}, queue size: ${this.queue.size()}`
       );
     }
-    const positionIdx = position - 1;
-    this.queueu.splice(positionIdx, 1);
+    this.queue.remove(position - 1);
   }
 
   shuffle() {
-    this.queueu = shuffle(this.queueu);
+    console.log("Shuffling queue...");
+    this.queue.shuffle();
   }
 
   async skip() {
@@ -327,7 +302,7 @@ class MusicPlayer {
     
     **Duration**: \`${toHoursAndMinutes(Number(nowPlayingInfo.lengthSeconds))}\`
     **Requester**: \`${songRequest.by}\`
-    **Queue   **: \`${this.queueu.length}\`
+    **Queue   **: \`${this.queue.size()}\`
     `;
     const toSend: MessageCreateOptions = {
       content: "",
@@ -342,9 +317,9 @@ class MusicPlayer {
   }
 
   async getQueueStatus() {
-    const playListInfo: Array<SavedInfo & { by: SongRequest["by"] }> = [];
-    for (let idx = 0; idx < this.queueu.length && idx < 25; idx++) {
-      const songRequest = this.queueu[idx];
+    const playListInfo: Array<SavedInfo & { by: QueueItem["by"] }> = [];
+    for (let idx = 0; idx < this.queue.size() && idx < 25; idx++) {
+      const songRequest = this.queue.get(idx);
       const info = await this.getVideoInfo(songRequest.url);
       playListInfo.push({ ...info, by: songRequest.by });
     }
@@ -358,7 +333,7 @@ class MusicPlayer {
         queueLines.push(`**${idx + 1}**: ${info.title} (*${info.by}*)`);
         totalQueueSeconds += Number(info.lengthSeconds);
       });
-      const hiddenSongs = this.queueu.length - playListInfo.length;
+      const hiddenSongs = this.queue.size() - playListInfo.length;
       if (hiddenSongs > 0) {
         queueLines.push(`...and ${hiddenSongs} more.`);
       }
