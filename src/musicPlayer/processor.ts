@@ -2,29 +2,38 @@ import { fork } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import ytdl from "ytdl-core";
+import ytpl from "ytpl";
 import db from "./db";
 import { CACHE_PATH, STAGING_PATH } from "./paths";
 import { SavedInfo } from "./types";
-import { random } from "./utils";
 
-const types = ["GET_INFO", "GET_INFOS", "GET_SONG"] as const;
+const kinds = ["getInfo", "getInfos", "getPlaylistInfo", "getSong"] as const;
 
-export type ProcessInfoArgs = {
-  kind: (typeof types)[0];
+type ProcessInfoArgs = {
+  kind: (typeof kinds)[0];
   videoId: string;
 };
 
-export type ProcessInfosArgs = {
-  kind: (typeof types)[1];
+type ProcessInfosArgs = {
+  kind: (typeof kinds)[1];
   videoIds: Array<string>;
 };
 
-export type ProcessSongArgs = {
-  kind: (typeof types)[2];
+type ProcessPlaylistInfoArgs = {
+  kind: (typeof kinds)[2];
+  playlistId: string;
+};
+
+type ProcessSongArgs = {
+  kind: (typeof kinds)[3];
   videoId: string;
 };
 
-export type Args = ProcessInfoArgs | ProcessInfosArgs | ProcessSongArgs;
+type Args =
+  | ProcessInfoArgs
+  | ProcessInfosArgs
+  | ProcessPlaylistInfoArgs
+  | ProcessSongArgs;
 
 process.on("message", async (msgString: string) => {
   const msg = JSON.parse(msgString) as Args;
@@ -37,20 +46,25 @@ process.on("message", async (msgString: string) => {
   }
 
   switch (msg.kind) {
-    case "GET_INFO":
-      process.send(JSON.stringify(await getInfo(msg.videoId)));
+    case "getInfo":
+      process.send(JSON.stringify(await _getInfo(msg.videoId)));
       return;
 
-    case "GET_INFOS":
-      process.send(JSON.stringify(await getInfos(msg.videoIds)));
+    case "getInfos":
+      process.send(JSON.stringify(await _getInfos(msg.videoIds)));
       return;
-    case "GET_SONG":
-      process.send(JSON.stringify(await getSong(msg.videoId)));
+
+    case "getPlaylistInfo":
+      process.send(JSON.stringify(await _getPlaylistInfo(msg.playlistId)));
+      return;
+
+    case "getSong":
+      process.send(JSON.stringify(await _getSong(msg.videoId)));
       return;
   }
 });
 
-const getInfo = async (videoId: string) => {
+const _getInfo = async (videoId: string) => {
   const row = await db.getSync(
     "select * from video_info where video_id = $videoId",
     {
@@ -86,16 +100,26 @@ const getInfo = async (videoId: string) => {
   return savedInfo;
 };
 
-const getInfos = async (videoIds: Array<string>) => {
+const _getInfos = async (videoIds: Array<string>) => {
+  console.log(`Getting multiple infos for ${videoIds.length} items`);
   const result: Array<SavedInfo> = [];
   for (let idx = 0; idx < videoIds.length; idx++) {
-    result.push(await getInfo(videoIds[idx]));
-    await new Promise((res) => setTimeout(res, random(0, 500)));
+    result.push(await _getInfo(videoIds[idx]));
   }
   return result;
 };
 
-const getSong = async (videoId: string) => {
+const _getPlaylistInfo = async (playlistId: string) => {
+  return await ytpl(playlistId, {
+    requestOptions: {
+      headers: {
+        cookie: process.env.COOKIE,
+      },
+    },
+  });
+};
+
+const _getSong = async (videoId: string) => {
   return new Promise<string>((res, rej) => {
     const t = Date.now();
     const cachedFilePath = path.resolve(CACHE_PATH, videoId);
@@ -132,8 +156,8 @@ const getSong = async (videoId: string) => {
   });
 };
 
-export const processReq = async <
-  T extends SavedInfo | string | Array<SavedInfo>
+const processReq = async <
+  T extends SavedInfo | string | Array<SavedInfo> | ytpl.Result
 >(
   args: Args
 ) => {
@@ -149,4 +173,33 @@ export const processReq = async <
     });
     compute.send(JSON.stringify(args));
   });
+};
+
+export const getInfo = async (...args: Parameters<typeof _getInfo>) => {
+  return await (processReq({ kind: "getInfo", videoId: args[0] }) as ReturnType<
+    typeof _getInfo
+  >);
+};
+
+export const getInfos = async (...args: Parameters<typeof _getInfos>) => {
+  return await (processReq({
+    kind: "getInfos",
+    videoIds: args[0],
+  }) as ReturnType<typeof _getInfos>);
+};
+
+export const getPlaylistInfo = async (
+  ...args: Parameters<typeof _getPlaylistInfo>
+) => {
+  return await (processReq({
+    kind: "getPlaylistInfo",
+    playlistId: args[0],
+  }) as ReturnType<typeof _getPlaylistInfo>);
+};
+
+export const getSong = async (...args: Parameters<typeof _getSong>) => {
+  return await (processReq({
+    kind: "getSong",
+    videoId: args[0],
+  }) as ReturnType<typeof _getSong>);
 };

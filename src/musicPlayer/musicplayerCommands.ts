@@ -6,6 +6,7 @@ import {
   SlashCommandBuilder,
   VoiceBasedChannel,
 } from "discord.js";
+import ytdl from "ytdl-core";
 import ytpl from "ytpl";
 import MusicPlayer from "./MusicPlayer";
 import {
@@ -13,6 +14,7 @@ import {
   getMusicPlayer,
   hasMusicPlayer,
 } from "./musicPlayersByChannel";
+import { getPlaylistInfo } from "./processor";
 import { SavedInfo } from "./types";
 
 const musicPlayerCheck = async (
@@ -60,13 +62,8 @@ export const playCommand = {
       const musicPlayer = getMusicPlayer(voiceChannel);
       //check if it's playlist
       if (ytpl.validateID(url)) {
-        const playlist = await ytpl(url, {
-          requestOptions: {
-            headers: {
-              cookie: process.env.COOKIE,
-            },
-          },
-        });
+        const playlistId = await ytpl.getPlaylistID(url);
+        const playlist = await getPlaylistInfo(playlistId);
 
         musicPlayer.addSong(
           playlist.items.map((item) => ({
@@ -78,7 +75,7 @@ export const playCommand = {
         await interaction.editReply(
           `:notes: Added **${playlist.title}** playlist to the queue with ${playlist.items.length} songs.`
         );
-      } else {
+      } else if (ytdl.validateURL(url)) {
         //single song
         let info: SavedInfo;
         try {
@@ -94,6 +91,10 @@ export const playCommand = {
           msg += `Place in queue: ${musicPlayer.queue.size()}.`;
         }
         await interaction.editReply(msg);
+      } else {
+        await interaction.editReply(
+          `:face_palm: Not a valid URL. Use either a video link or a playlist link. What is this shit? ${url}`
+        );
       }
 
       if (!musicPlayer.playing) {

@@ -17,7 +17,7 @@ import {
 import ytdl from "ytdl-core";
 import db from "./db";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
-import { processReq } from "./processor";
+import { getInfo, getInfos, getSong } from "./processor";
 import Queue, { QueueItem } from "./Queue";
 import { SavedInfo } from "./types";
 import { toHoursAndMinutes } from "./utils";
@@ -123,7 +123,6 @@ class MusicPlayer {
       console.log(`Playing next song: ${nextItem.url}`);
       const videoId = ytdl.getURLVideoID(nextItem.url);
       const filePath = await this.ensureSongCached(nextItem.url);
-      console.log("file path", filePath);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
@@ -161,7 +160,7 @@ class MusicPlayer {
     } catch (err) {
       throw new Error("Bad URL input. Check your YouTube URL: " + url);
     }
-    return await processReq<SavedInfo>({ kind: "GET_INFO", videoId });
+    return await getInfo(videoId);
   };
 
   addSong(request: QueueItem | Array<QueueItem>) {
@@ -171,7 +170,7 @@ class MusicPlayer {
 
   ensureSongCached = async (url: string) => {
     const videoId = ytdl.getURLVideoID(url);
-    return (await processReq<string>({ kind: "GET_SONG", videoId })) as string;
+    return await getSong(videoId);
   };
 
   move(from: number, to: number = 1) {
@@ -235,10 +234,9 @@ class MusicPlayer {
     for (let idx = 0; idx < this.queue.size() && idx < 10; idx++) {
       queueItemPage.push(this.queue.get(idx));
     }
-    const savedInfos = (await processReq({
-      kind: "GET_INFOS",
-      videoIds: queueItemPage.map((item) => ytdl.getVideoID(item.url)),
-    })) as Array<SavedInfo>;
+    const savedInfos = await getInfos(
+      queueItemPage.map((item) => ytdl.getVideoID(item.url))
+    );
 
     const playListInfo: Array<SavedInfo & { by: QueueItem["by"] }> =
       savedInfos.map((info, idx) => ({
