@@ -7,12 +7,13 @@ import {
   VoiceBasedChannel,
 } from "discord.js";
 import ytpl from "ytpl";
-import MusicPlayer, { SavedInfo } from "./MusicPlayer";
+import MusicPlayer from "./MusicPlayer";
 import {
   addMusicPlayer,
   getMusicPlayer,
   hasMusicPlayer,
 } from "./musicPlayersByChannel";
+import { SavedInfo } from "./types";
 
 const musicPlayerCheck = async (
   voiceChannel: VoiceBasedChannel,
@@ -57,6 +58,7 @@ export const playCommand = {
       }
 
       const musicPlayer = getMusicPlayer(voiceChannel);
+      //check if it's playlist
       if (ytpl.validateID(url)) {
         const playlist = await ytpl(url, {
           requestOptions: {
@@ -65,16 +67,19 @@ export const playCommand = {
             },
           },
         });
-        playlist.items.forEach((item) => {
-          musicPlayer.addSong({
+
+        musicPlayer.addSong(
+          playlist.items.map((item) => ({
             url: item.shortUrl,
             by: username,
-          });
-        });
+          }))
+        );
+
         await interaction.editReply(
           `:notes: Added **${playlist.title}** playlist to the queue with ${playlist.items.length} songs.`
         );
       } else {
+        //single song
         let info: SavedInfo;
         try {
           info = await musicPlayer.getVideoInfo(url);

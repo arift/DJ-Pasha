@@ -31,8 +31,12 @@ class Queue {
     return item;
   }
 
-  enqueue(item: QueueItem) {
-    this.queue.push(item);
+  enqueue(item: QueueItem | Array<QueueItem>) {
+    if (Array.isArray(item)) {
+      this.queue.push(...item);
+    } else {
+      this.queue.push(item);
+    }
     this.onChangeQueue();
   }
 

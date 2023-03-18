@@ -14,21 +14,13 @@ import {
   VoiceBasedChannel,
   VoiceState,
 } from "discord.js";
-import fs from "fs";
 import ytdl from "ytdl-core";
 import db from "./db";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
-import { CACHE_PATH, STAGING_PATH } from "./paths";
+import { processReq } from "./processor";
 import Queue, { QueueItem } from "./Queue";
+import { SavedInfo } from "./types";
 import { toHoursAndMinutes } from "./utils";
-
-export type SavedInfo = {
-  title: string;
-  ownerChannelName: string;
-  description: string;
-  lengthSeconds: string;
-  videoUrl: string;
-};
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
@@ -131,6 +123,7 @@ class MusicPlayer {
       console.log(`Playing next song: ${nextItem.url}`);
       const videoId = ytdl.getURLVideoID(nextItem.url);
       const filePath = await this.ensureSongCached(nextItem.url);
+      console.log("file path", filePath);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
@@ -168,94 +161,18 @@ class MusicPlayer {
     } catch (err) {
       throw new Error("Bad URL input. Check your YouTube URL: " + url);
     }
-
-    const row = await db.getSync(
-      "select * from video_info where video_id = $videoId",
-      {
-        $videoId: videoId,
-      }
-    );
-
-    if (row) {
-      return JSON.parse(row.info);
-    }
-
-    console.log(`Fetching video info: ${url}`);
-    const info = await ytdl.getInfo(url, {
-      requestOptions: {
-        headers: {
-          cookie: process.env.COOKIE,
-        },
-      },
-    });
-    const savedInfo: SavedInfo = {
-      title: info.videoDetails.title,
-      ownerChannelName: info.videoDetails.ownerChannelName,
-      description: info.videoDetails.description,
-      lengthSeconds: info.videoDetails.lengthSeconds,
-      videoUrl: info.videoDetails.video_url,
-    };
-
-    await db.runSync(
-      "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
-      { $videoId: videoId, $info: JSON.stringify(savedInfo) }
-    );
-
-    return savedInfo;
+    return await processReq<SavedInfo>({ kind: "GET_INFO", videoId });
   };
 
-  addSong(request: QueueItem) {
-    console.log(`Adding song to the queue ${request.url}`);
+  addSong(request: QueueItem | Array<QueueItem>) {
+    console.log(`Adding to queue: `, request);
     this.queue.enqueue(request);
   }
 
-  ensureSongCached = (url: string) =>
-    new Promise<string>((res, rej) => {
-      const videoId = ytdl.getURLVideoID(url);
-      const cachedFilePath = `${CACHE_PATH}/${videoId}`;
-      if (fs.existsSync(cachedFilePath)) {
-        res(cachedFilePath);
-      } else {
-        try {
-          const t = Date.now();
-          console.log(`Song not in cache, downloading it: ${url}`);
-          const ytStream = ytdl(url, {
-            filter: "audioonly",
-            quality: "highestaudio",
-            requestOptions: {
-              headers: {
-                cookie: process.env.COOKIE,
-              },
-            },
-          });
-          const stagingPath = `${STAGING_PATH}/${videoId}`;
-          ytStream.pipe(fs.createWriteStream(stagingPath));
-          ytStream.on("error", (err) => {
-            rej(err);
-          });
-          ytStream.on("end", (args) => {
-            console.log(
-              `Song downloaded it in ${(Date.now() - t) / 1000} seconds: ${url}`
-            );
-            try {
-              if (
-                !fs.existsSync(cachedFilePath) &&
-                fs.existsSync(stagingPath)
-              ) {
-                fs.renameSync(stagingPath, cachedFilePath);
-              }
-              res(cachedFilePath);
-            } catch (err) {
-              console.error("Rename error: ", err);
-              rej();
-            }
-          });
-        } catch (err) {
-          console.error("Error caching song: ", err);
-          rej();
-        }
-      }
-    });
+  ensureSongCached = async (url: string) => {
+    const videoId = ytdl.getURLVideoID(url);
+    return (await processReq<string>({ kind: "GET_SONG", videoId })) as string;
+  };
 
   move(from: number, to: number = 1) {
     const fromIdx = from - 1;
@@ -314,12 +231,20 @@ class MusicPlayer {
   }
 
   async getQueueStatus() {
-    const playListInfo: Array<SavedInfo & { by: QueueItem["by"] }> = [];
-    for (let idx = 0; idx < this.queue.size() && idx < 25; idx++) {
-      const songRequest = this.queue.get(idx);
-      const info = await this.getVideoInfo(songRequest.url);
-      playListInfo.push({ ...info, by: songRequest.by });
+    const queueItemPage: Array<QueueItem> = [];
+    for (let idx = 0; idx < this.queue.size() && idx < 10; idx++) {
+      queueItemPage.push(this.queue.get(idx));
     }
+    const savedInfos = (await processReq({
+      kind: "GET_INFOS",
+      videoIds: queueItemPage.map((item) => ytdl.getVideoID(item.url)),
+    })) as Array<SavedInfo>;
+
+    const playListInfo: Array<SavedInfo & { by: QueueItem["by"] }> =
+      savedInfos.map((info, idx) => ({
+        ...info,
+        by: queueItemPage[idx].by,
+      }));
 
     let totalQueueSeconds: number = 0;
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");

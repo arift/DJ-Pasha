@@ -21,6 +21,7 @@ export const STAGING_PATH = path.resolve(CACHE_PATH, "staging");
 export const DB_PATH = path.resolve(APP_DIR, "cache.db");
 
 console.log(`Setting app directory to ${APP_DIR}`);
+
 if (PROGRAM_FILES_ROOT.length > 0 && !fs.existsSync(PROGRAM_FILES_ROOT)) {
   fs.mkdirSync(PROGRAM_FILES_ROOT);
 }
