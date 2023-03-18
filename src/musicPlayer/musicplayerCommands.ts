@@ -7,7 +7,6 @@ import {
   VoiceBasedChannel,
 } from "discord.js";
 import ytpl from "ytpl";
-import { db } from "./cache";
 import MusicPlayer, { SavedInfo } from "./MusicPlayer";
 import {
   addMusicPlayer,
@@ -53,7 +52,7 @@ export const playCommand = {
       if (!hasMusicPlayer(voiceChannel)) {
         addMusicPlayer(
           voiceChannel,
-          new MusicPlayer(voiceChannel, textChannel, db, client)
+          new MusicPlayer(voiceChannel, textChannel, client)
         );
       }
 

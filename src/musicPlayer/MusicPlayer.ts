@@ -16,8 +16,9 @@ import {
 } from "discord.js";
 import fs from "fs";
 import ytdl from "ytdl-core";
-import { CACHE_PATH, Database, STAGING_PATH } from "./cache";
+import db from "./db";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
+import { CACHE_PATH, STAGING_PATH } from "./paths";
 import Queue, { QueueItem } from "./Queue";
 import { toHoursAndMinutes } from "./utils";
 
@@ -38,14 +39,12 @@ class MusicPlayer {
   queue: Queue;
   playing = false;
   nowPlaying: QueueItem | null = null;
-  db: Database;
   hydraterInterval: NodeJS.Timer | null;
   disconnectTimeout: NodeJS.Timeout | null;
   onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
   constructor(
     voiceChannel: VoiceBasedChannel,
     textChannel: GuildTextBasedChannel,
-    db: Database,
     client: Client
   ) {
     console.log(
@@ -56,7 +55,6 @@ class MusicPlayer {
     );
     this.voiceChannel = voiceChannel;
     this.textChannel = textChannel;
-    this.db = db;
     this.client = client;
     this.voiceConnection = joinVoiceChannel({
       channelId: voiceChannel.id,
@@ -137,7 +135,7 @@ class MusicPlayer {
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
-        await this.db.runSync(
+        await db.runSync(
           `
             INSERT OR IGNORE INTO plays (video_id, username)
             VALUES ($videoId, $username)
@@ -172,7 +170,7 @@ class MusicPlayer {
       throw new Error("Bad URL input. Check your YouTube URL: " + url);
     }
 
-    const row = await this.db.getSync(
+    const row = await db.getSync(
       "select * from video_info where video_id = $videoId",
       {
         $videoId: videoId,
@@ -199,7 +197,7 @@ class MusicPlayer {
       videoUrl: info.videoDetails.video_url,
     };
 
-    await this.db.runSync(
+    await db.runSync(
       "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
       { $videoId: videoId, $info: JSON.stringify(savedInfo) }
     );
