@@ -39,7 +39,6 @@ class MusicPlayer {
   queue: Queue;
   playing = false;
   nowPlaying: QueueItem | null = null;
-  hydraterInterval: NodeJS.Timer | null;
   disconnectTimeout: NodeJS.Timeout | null;
   onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
   constructor(
