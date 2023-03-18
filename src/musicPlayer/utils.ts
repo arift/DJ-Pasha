@@ -32,3 +32,15 @@ export function shuffle<T>(array: Array<T>) {
 export const random = (min: number, max: number) => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
+
+export const getArgv = (argument: string) => {
+  const argv = process.argv.find((val, index) => {
+    const splitVal = val.split("=");
+    return splitVal.length > 1 && splitVal[0].trim() === argument;
+  });
+  if (!argv) {
+    return null;
+  }
+
+  return argv.split("=").slice(1).join("=");
+};

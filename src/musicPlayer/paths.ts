@@ -1,19 +1,8 @@
 import fs from "fs";
 import path from "path";
+import { getArgv } from "./utils";
 
-let PROGRAM_FILES_ROOT = "";
-
-process.argv.find((val, index) => {
-  const splitVal = val.split("=");
-  if (
-    splitVal.length > 1 &&
-    splitVal[0].trim() === "--appDir" &&
-    splitVal[1].length > 0
-  ) {
-    PROGRAM_FILES_ROOT = splitVal[1];
-    return true;
-  }
-});
+let PROGRAM_FILES_ROOT = getArgv("--appDir") ?? "";
 
 export const APP_DIR = path.resolve(PROGRAM_FILES_ROOT, "PashaPlayerFiles");
 export const CACHE_PATH = path.resolve(APP_DIR, "cache");

@@ -15,12 +15,30 @@ import {
   VoiceState,
 } from "discord.js";
 import ytdl from "ytdl-core";
-import db from "./db";
+import { getDb } from "./db";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
+import { DB_PATH } from "./paths";
 import { getInfo, getInfos, getSong } from "./processor";
 import Queue, { QueueItem } from "./Queue";
 import { SavedInfo } from "./types";
 import { toHoursAndMinutes } from "./utils";
+
+const db = getDb(DB_PATH);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS video_info (
+    video_id TEXT PRIMARY KEY, 
+    info TEXT, 
+    insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS plays (
+    video_id TEXT, 
+    username TEXT, 
+    play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
+    PRIMARY KEY (video_id, username, play_timestamp)
+  )`);
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;

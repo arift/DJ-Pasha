@@ -1,11 +1,10 @@
-import { fork } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import ytdl from "ytdl-core";
 import ytpl from "ytpl";
-import db from "./db";
-import { CACHE_PATH, STAGING_PATH } from "./paths";
-import { SavedInfo } from "./types";
+import { Database, getDb } from "../db";
+import { SavedInfo } from "../types";
+import { getArgv } from "../utils";
 
 const kinds = ["getInfo", "getInfos", "getPlaylistInfo", "getSong"] as const;
 
@@ -29,14 +28,30 @@ type ProcessSongArgs = {
   videoId: string;
 };
 
-type Args =
+export type ProcessArgs =
   | ProcessInfoArgs
   | ProcessInfosArgs
   | ProcessPlaylistInfoArgs
   | ProcessSongArgs;
 
+export type ParentContext = {
+  cachePath: string;
+  stagingPath: string;
+  dbPath: string;
+};
+
+let parentContext: ParentContext;
+let db: Database;
+
 process.on("message", async (msgString: string) => {
-  const msg = JSON.parse(msgString) as Args;
+  const msg = JSON.parse(msgString) as ProcessArgs;
+  const parentContextString = getArgv("--parentContext");
+  if (!parentContextString) {
+    throw new Error("Missing parent context");
+  }
+
+  parentContext = JSON.parse(parentContextString) as ParentContext;
+  db = getDb(parentContext.dbPath);
 
   if (!msg.kind) {
     console.log(
@@ -64,7 +79,7 @@ process.on("message", async (msgString: string) => {
   }
 });
 
-const _getInfo = async (videoId: string) => {
+export const _getInfo = async (videoId: string) => {
   const row = await db.getSync(
     "select * from video_info where video_id = $videoId",
     {
@@ -100,7 +115,7 @@ const _getInfo = async (videoId: string) => {
   return savedInfo;
 };
 
-const _getInfos = async (videoIds: Array<string>) => {
+export const _getInfos = async (videoIds: Array<string>) => {
   console.log(`Getting multiple infos for ${videoIds.length} items`);
   const result: Array<SavedInfo> = [];
   for (let idx = 0; idx < videoIds.length; idx++) {
@@ -109,7 +124,7 @@ const _getInfos = async (videoIds: Array<string>) => {
   return result;
 };
 
-const _getPlaylistInfo = async (playlistId: string) => {
+export const _getPlaylistInfo = async (playlistId: string) => {
   return await ytpl(playlistId, {
     requestOptions: {
       headers: {
@@ -119,10 +134,10 @@ const _getPlaylistInfo = async (playlistId: string) => {
   });
 };
 
-const _getSong = async (videoId: string) => {
+export const _getSong = async (videoId: string) => {
   return new Promise<string>((res, rej) => {
     const t = Date.now();
-    const cachedFilePath = path.resolve(CACHE_PATH, videoId);
+    const cachedFilePath = path.resolve(parentContext.cachePath, videoId);
 
     if (fs.existsSync(cachedFilePath)) {
       res(cachedFilePath);
@@ -130,7 +145,7 @@ const _getSong = async (videoId: string) => {
     }
 
     console.log(`Song not in cache, downloading it: [${videoId}]`);
-    const stagingFilePath = path.resolve(STAGING_PATH, videoId);
+    const stagingFilePath = path.resolve(parentContext.stagingPath, videoId);
     const ytStream = ytdl(videoId, {
       filter: "audioonly",
       quality: "highestaudio",
@@ -154,52 +169,4 @@ const _getSong = async (videoId: string) => {
       res(cachedFilePath);
     });
   });
-};
-
-const processReq = async <
-  T extends SavedInfo | string | Array<SavedInfo> | ytpl.Result
->(
-  args: Args
-) => {
-  return await new Promise<T>((res, rej) => {
-    const compute = fork("build/musicPlayer/processor");
-    compute.on("message", (result: any) => {
-      res(JSON.parse(result));
-      compute.kill();
-    });
-    compute.on("error", (err) => {
-      rej(err);
-      compute.kill();
-    });
-    compute.send(JSON.stringify(args));
-  });
-};
-
-export const getInfo = async (...args: Parameters<typeof _getInfo>) => {
-  return await (processReq({ kind: "getInfo", videoId: args[0] }) as ReturnType<
-    typeof _getInfo
-  >);
-};
-
-export const getInfos = async (...args: Parameters<typeof _getInfos>) => {
-  return await (processReq({
-    kind: "getInfos",
-    videoIds: args[0],
-  }) as ReturnType<typeof _getInfos>);
-};
-
-export const getPlaylistInfo = async (
-  ...args: Parameters<typeof _getPlaylistInfo>
-) => {
-  return await (processReq({
-    kind: "getPlaylistInfo",
-    playlistId: args[0],
-  }) as ReturnType<typeof _getPlaylistInfo>);
-};
-
-export const getSong = async (...args: Parameters<typeof _getSong>) => {
-  return await (processReq({
-    kind: "getSong",
-    videoId: args[0],
-  }) as ReturnType<typeof _getSong>);
 };

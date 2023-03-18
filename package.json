@@ -4,7 +4,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json --outDir build",
+    "build": "npx rimraf ./build && tsc -p tsconfig.json --outDir build",
     "start": "npm run-script build && node build/index.js"
   },
   "author": "Shay DeWael",
