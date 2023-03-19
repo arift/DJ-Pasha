@@ -286,11 +286,15 @@ class MusicPlayer {
         this.queueCollector.on(
           "collect",
           async (buttonInteraction: ButtonInteraction) => {
-            await buttonInteraction.deferReply();
+            await buttonInteraction.deferUpdate();
             console.log("Collected page");
             const queuePage = getArg("--queuePage", [
               buttonInteraction.customId,
             ]);
+            await buttonInteraction.editReply({
+              ...toSend,
+              embeds: [{ ...embed, description: "Loading next page..." }],
+            });
             await buttonInteraction.editReply(
               await this.getQueueStatus(Number(queuePage))
             );
