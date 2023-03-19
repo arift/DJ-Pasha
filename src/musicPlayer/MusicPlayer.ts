@@ -89,9 +89,14 @@ class MusicPlayer {
       console.log("In idle, playing next song");
       await musicPlayer.playNextSong();
     });
-    this.onVoiceStateUpdate = () => {
-      if (this.voiceChannel.members.size < 2) {
-        console.log("No one is in server, starting disconnect timer.");
+    this.onVoiceStateUpdate = (oldState, newState) => {
+      if (
+        this.voiceChannel.members.size < 2 ||
+        (oldState.channelId && !newState.channelId)
+      ) {
+        console.log(
+          "No one is in server or got kicked out of the channel, starting disconnect timer."
+        );
         this.startDiconnectTimeout();
       } else {
         this.stopDisconnectTimeout();
