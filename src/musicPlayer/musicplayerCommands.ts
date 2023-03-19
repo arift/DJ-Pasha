@@ -42,6 +42,7 @@ export const playCommand = {
     await interaction.deferReply();
     const client = interaction.client;
     const username = interaction.user.username;
+    const nickname = (interaction.member as GuildMember).nickname;
     const voiceChannel = (interaction.member as GuildMember).voice.channel;
     const textChannel = interaction.channel;
     const url = interaction.options.getString("url").trim();
@@ -71,6 +72,7 @@ export const playCommand = {
             id: ytdl.getVideoID(item.shortUrl),
             url: item.shortUrl,
             by: username,
+            byNickname: nickname,
           }))
         );
 
@@ -88,7 +90,12 @@ export const playCommand = {
           await interaction.editReply(`${err}`);
           return;
         }
-        musicPlayer.addSong({ id, url, by: username });
+        musicPlayer.addSong({
+          id,
+          url,
+          by: username,
+          byNickname: nickname,
+        });
         let msg = `:notes: Added **${info.title}** to the queue. `;
         if (musicPlayer.playing && musicPlayer.queue.size() > 0) {
           msg += `Place in queue: ${musicPlayer.queue.size()}.`;
@@ -98,6 +105,7 @@ export const playCommand = {
         await interaction.editReply(
           `:face_palm: Not a valid URL. Use either a video link or a playlist link. What is this shit? ${url}`
         );
+        return;
       }
 
       if (!musicPlayer.playing) {
@@ -125,31 +133,13 @@ export const queueCommand = {
       await interaction.deferReply();
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(voiceChannel, interaction)) return;
-
       const musicPlayer = getMusicPlayer(voiceChannel);
       await interaction.editReply(await musicPlayer.getQueueStatus());
     } catch (err) {
-      console.error(err);
+      console.error("Error in queue: ", err);
       await interaction.editReply(`Error: ${err}`);
     }
   },
-};
-
-export const queuePageCommand = async (
-  interaction: ButtonInteraction,
-  startRow: number
-) => {
-  try {
-    await interaction.deferReply();
-    const voiceChannel = (interaction.member as GuildMember).voice.channel;
-    if (await musicPlayerCheck(voiceChannel, interaction)) return;
-
-    const musicPlayer = getMusicPlayer(voiceChannel);
-    await interaction.editReply(await musicPlayer.getQueueStatus(startRow));
-  } catch (err) {
-    console.error(err);
-    await interaction.editReply(`Error: ${err}`);
-  }
 };
 
 export const moveCommand = {

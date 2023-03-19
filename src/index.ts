@@ -1,14 +1,6 @@
-import {
-  ButtonInteraction,
-  Client,
-  Events,
-  GatewayIntentBits,
-  REST,
-  Routes,
-} from "discord.js";
+import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
 import "dotenv/config";
-import { commands, queuePageCommand } from "./musicPlayer/musicplayerCommands";
-import { getArg } from "./musicPlayer/utils";
+import { commands } from "./musicPlayer/musicplayerCommands";
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
@@ -21,22 +13,8 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (interaction.isButton()) {
-    console.log(
-      `Got button interaction ${(interaction as ButtonInteraction).customId}`
-    );
-    const queuePageInteractionArg = getArg("--queuePage", [
-      (interaction as ButtonInteraction).customId,
-    ]);
-    if (queuePageInteractionArg) {
-      await queuePageCommand(interaction, Number(queuePageInteractionArg));
-    }
-    return;
-  }
-
   if (!interaction.isChatInputCommand()) return;
   console.log(`Got interaction ${interaction.commandName}`);
-
   const command = commands[interaction.commandName];
 
   if (!command) {

@@ -4,6 +4,7 @@ export type QueueItem = {
   id: string;
   url: string;
   by: string;
+  byNickname: string | null;
 };
 
 type onChange = (queue: Array<QueueItem>) => void;

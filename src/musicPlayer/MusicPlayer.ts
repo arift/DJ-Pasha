@@ -9,10 +9,13 @@ import {
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonInteraction,
   ButtonStyle,
   Client,
   EmbedBuilder,
   GuildTextBasedChannel,
+  InteractionCollector,
+  InteractionUpdateOptions,
   MessageCreateOptions,
   VoiceBasedChannel,
   VoiceState,
@@ -22,7 +25,7 @@ import { removeMusicPlayer } from "./musicPlayersByChannel";
 import { DB_PATH } from "./paths";
 import { getInfo, getInfos, getSong } from "./processor";
 import Queue, { QueueItem } from "./Queue";
-import { toHoursAndMinutes } from "./utils";
+import { getArg, toHoursAndMinutes } from "./utils";
 
 const db = getDb(DB_PATH);
 
@@ -47,6 +50,7 @@ class MusicPlayer {
   audioPlayer: AudioPlayer;
   client: Client;
   voiceConnection: VoiceConnection;
+  queueCollector: InteractionCollector<any> | null = null;
   queue: Queue;
   playing = false;
   nowPlaying: QueueItem | null = null;
@@ -214,10 +218,10 @@ class MusicPlayer {
     const songRequest = this.nowPlaying;
     const nowPlayingInfo = await getInfo(songRequest.url);
     const nowPlayingText = `
-    **${nowPlayingInfo.title} - ${nowPlayingInfo.ownerChannelName}**
+    **${nowPlayingInfo.title}**
     
     **Duration**: \`${toHoursAndMinutes(Number(nowPlayingInfo.lengthSeconds))}\`
-    **Requester**: \`${songRequest.by}\`
+    **Requester**: \`${formatUsername(songRequest.by, songRequest.byNickname)}\`
     **Queue   **: \`${this.queue.size()}\`
     `;
     const toSend: MessageCreateOptions = {
@@ -233,13 +237,13 @@ class MusicPlayer {
   }
 
   async getQueueStatus(startRow = 0, pageSize = 10) {
-    const toSend: MessageCreateOptions = {
+    const toSend: InteractionUpdateOptions = {
       content: "",
       embeds: [],
       components: [],
     };
 
-    console.log("Queue start row", startRow);
+    console.log("Showing queue starting from row ", startRow);
     const totalQueueSize = this.queue.size();
     const lastRowIdx =
       totalQueueSize < pageSize + startRow
@@ -257,9 +261,10 @@ class MusicPlayer {
       const queueLines = [];
       playlistInfos.forEach((info, idx) => {
         queueLines.push(
-          `**${startRow + idx + 1}**: ${info.title} (*${
-            queueItemPage[idx].by
-          }*)`
+          `**${startRow + idx + 1}**: ${info.title} - *${formatUsername(
+            queueItemPage[idx].by,
+            queueItemPage[idx].byNickname
+          )}*`
         );
         totalQueueSeconds += Number(info.lengthSeconds);
       });
@@ -269,7 +274,33 @@ class MusicPlayer {
       //figure out if we need pagination
       if (startRow > 0 || hiddenSongs > 0) {
         //has page info
-        console.log("Has hidden songs, showing pagination");
+        if (this.queueCollector) {
+          this.queueCollector.stop();
+          this.queueCollector = null;
+        }
+
+        this.queueCollector = this.textChannel.createMessageComponentCollector({
+          filter: (i) => i.customId.includes("--queuePage"),
+        });
+
+        this.queueCollector.on(
+          "collect",
+          async (buttonInteraction: ButtonInteraction) => {
+            console.log("Collected page");
+            const queuePage = getArg("--queuePage", [
+              buttonInteraction.customId,
+            ]);
+            await buttonInteraction.update(
+              await this.getQueueStatus(Number(queuePage))
+            );
+          }
+        );
+
+        this.queueCollector.on("end", (collected) => {
+          console.log(`Collected ${collected.size} items`);
+          this.queueCollector = null;
+        });
+
         const nextButton = new ButtonBuilder()
           .setCustomId(`--queuePage=${lastRowIdx}`)
           .setDisabled(hiddenSongs === 0)
@@ -295,7 +326,7 @@ class MusicPlayer {
           )}`,
         });
       } else {
-        //no page info
+        //no pagination needed
         embed.setFooter({
           text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
         });
@@ -311,4 +342,10 @@ class MusicPlayer {
   }
 }
 
+const formatUsername = (username: string, nickname: string | null) => {
+  if (nickname) {
+    return `${nickname} (${username})`;
+  }
+  return username;
+};
 export default MusicPlayer;
