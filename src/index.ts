@@ -14,7 +14,9 @@ client.once(Events.ClientReady, async (c) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  console.log(`Got interaction ${interaction.commandName}`);
+  console.log(
+    `---------Start Interaction[${interaction.commandName}]-----------`
+  );
   const command = commands[interaction.commandName];
 
   if (!command) {
@@ -38,6 +40,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
   }
+  console.log(
+    `---------End Interaction[${interaction.commandName}]-----------`
+  );
 });
 
 //deploy commands
