@@ -90,11 +90,7 @@ class MusicPlayer {
       await musicPlayer.playNextSong();
     });
     this.onVoiceStateUpdate = (oldState, newState) => {
-      if (oldState.channelId && !newState.channelId) {
-        console.log("Got kicked out. Disconnecting.");
-        this.stopDisconnectTimeout();
-        this.disconnect();
-      } else if (this.voiceChannel.members.size < 2) {
+      if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
       } else {
@@ -102,6 +98,14 @@ class MusicPlayer {
       }
     };
     this.client.on("voiceStateUpdate", this.onVoiceStateUpdate);
+    this.voiceConnection.on("stateChange", (oldConnection, newConnection) => {
+      if (newConnection.status === "disconnected") {
+        console.log(
+          "Got kicked or disconnect for some reason. Stopping everything."
+        );
+        this.disconnect();
+      }
+    });
   }
 
   startDiconnectTimeout = () => {
@@ -112,15 +116,6 @@ class MusicPlayer {
     this.disconnectTimeout = setTimeout(this.disconnect, 60000);
   };
 
-  disconnect = () => {
-    console.log("Disconnecting. Clearing everything up...");
-    this.voiceConnection.disconnect();
-    this.voiceConnection.destroy();
-    this.audioPlayer.removeAllListeners();
-    this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
-    removeMusicPlayer(this.voiceChannel);
-  };
-
   stopDisconnectTimeout = () => {
     if (!this.disconnectTimeout) {
       return;
@@ -128,6 +123,17 @@ class MusicPlayer {
     console.log("Stopping disconnect timeout.");
     clearTimeout(this.disconnectTimeout);
     this.disconnectTimeout = null;
+  };
+
+  disconnect = () => {
+    console.log("Disconnecting. Clearing everything up...");
+    clearTimeout(this.disconnectTimeout);
+    this.disconnectTimeout = null;
+    this.voiceConnection.destroy();
+    this.audioPlayer.stop();
+    this.audioPlayer.removeAllListeners();
+    this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
+    removeMusicPlayer(this.voiceChannel);
   };
 
   async playNextSong() {
