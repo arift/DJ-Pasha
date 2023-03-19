@@ -216,7 +216,7 @@ class MusicPlayer {
       return "";
     }
     const songRequest = this.nowPlaying;
-    const nowPlayingInfo = await getInfo(songRequest.url);
+    const nowPlayingInfo = await getInfo(songRequest.id);
     const nowPlayingText = `
     **${nowPlayingInfo.title}**
     
