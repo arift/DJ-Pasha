@@ -59,6 +59,9 @@ export const playCommand = {
           voiceChannel,
           new MusicPlayer(voiceChannel, textChannel, client)
         );
+        textChannel.send(
+          `:mirror_ball: :fire: DJ Pasha is in the house! :fire: :mirror_ball:`
+        );
       }
 
       const musicPlayer = getMusicPlayer(voiceChannel);

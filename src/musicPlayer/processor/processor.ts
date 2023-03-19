@@ -111,6 +111,7 @@ export const _getInfo = async (videoId: string) => {
     "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
     { $videoId: videoId, $info: JSON.stringify(savedInfo) }
   );
+  await db.runSync("commit");
 
   return savedInfo;
 };

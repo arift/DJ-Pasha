@@ -164,6 +164,7 @@ class MusicPlayer {
             $username: nextItem.by,
           }
         );
+        await db.runSync("commit");
         console.log(
           `Added new stat for video ${nextItem.id} and user ${nextItem.by}`
         );
@@ -173,9 +174,9 @@ class MusicPlayer {
     } catch (err) {
       await new Promise((res) => {
         console.log(
-          "Problem while playing song. Waiting five seconds before attempting agian..."
+          "Problem while playing song. Waiting 3 seconds before trying next song..."
         );
-        setTimeout(res, 5000);
+        setTimeout(res, 3000);
       });
       await this.playNextSong();
     }
@@ -274,8 +275,19 @@ class MusicPlayer {
         );
         totalQueueSeconds += Number(info.lengthSeconds);
       });
-
       const hiddenSongs = this.queue.size() - lastRowIdx;
+
+      const nextButton = new ButtonBuilder()
+        .setCustomId(`--queuePage=${lastRowIdx}`)
+        .setDisabled(hiddenSongs === 0)
+        .setStyle(ButtonStyle.Primary)
+        .setLabel(`Next`);
+
+      const prevButton = new ButtonBuilder()
+        .setCustomId(`--queuePage=${startRow - pageSize}`)
+        .setDisabled(startRow === 0)
+        .setStyle(ButtonStyle.Primary)
+        .setLabel("Previous");
 
       //figure out if we need pagination
       if (startRow > 0 || hiddenSongs > 0) {
@@ -293,6 +305,12 @@ class MusicPlayer {
           "collect",
           async (buttonInteraction: ButtonInteraction) => {
             await buttonInteraction.deferUpdate();
+            const actionRow =
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                prevButton.setDisabled(true),
+                nextButton.setDisabled(true)
+              );
+
             console.log("Collected page");
             const queuePage = getArg("--queuePage", [
               buttonInteraction.customId,
@@ -300,6 +318,7 @@ class MusicPlayer {
             await buttonInteraction.editReply({
               ...toSend,
               embeds: [{ ...embed, description: "Loading next page..." }],
+              components: [actionRow],
             });
             await buttonInteraction.editReply(
               await this.getQueueStatus(Number(queuePage))
@@ -311,18 +330,6 @@ class MusicPlayer {
           console.log(`Collected ${collected.size} items`);
           this.queueCollector = null;
         });
-
-        const nextButton = new ButtonBuilder()
-          .setCustomId(`--queuePage=${lastRowIdx}`)
-          .setDisabled(hiddenSongs === 0)
-          .setStyle(ButtonStyle.Primary)
-          .setLabel(`Next`);
-
-        const prevButton = new ButtonBuilder()
-          .setCustomId(`--queuePage=${startRow - pageSize}`)
-          .setDisabled(startRow === 0)
-          .setStyle(ButtonStyle.Primary)
-          .setLabel("Previous");
 
         const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
           prevButton,
