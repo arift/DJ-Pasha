@@ -90,13 +90,12 @@ class MusicPlayer {
       await musicPlayer.playNextSong();
     });
     this.onVoiceStateUpdate = (oldState, newState) => {
-      if (
-        this.voiceChannel.members.size < 2 ||
-        (oldState.channelId && !newState.channelId)
-      ) {
-        console.log(
-          "No one is in server or got kicked out of the channel, starting disconnect timer."
-        );
+      if (oldState.channelId && !newState.channelId) {
+        console.log("Got kicked out. Disconnecting.");
+        this.stopDisconnectTimeout();
+        this.disconnect();
+      } else if (this.voiceChannel.members.size < 2) {
+        console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
       } else {
         this.stopDisconnectTimeout();
@@ -110,14 +109,16 @@ class MusicPlayer {
       return;
     }
     console.log("Starting disconnect timeout.");
-    this.disconnectTimeout = setTimeout(() => {
-      console.log("Disconnecting. Clearing everything up...");
-      this.voiceConnection.disconnect();
-      this.voiceConnection.destroy();
-      this.audioPlayer.removeAllListeners();
-      this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
-      removeMusicPlayer(this.voiceChannel);
-    }, 60000);
+    this.disconnectTimeout = setTimeout(this.disconnect, 60000);
+  };
+
+  disconnect = () => {
+    console.log("Disconnecting. Clearing everything up...");
+    this.voiceConnection.disconnect();
+    this.voiceConnection.destroy();
+    this.audioPlayer.removeAllListeners();
+    this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
+    removeMusicPlayer(this.voiceChannel);
   };
 
   stopDisconnectTimeout = () => {
