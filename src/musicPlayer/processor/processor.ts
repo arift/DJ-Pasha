@@ -6,7 +6,14 @@ import { Database, getDb } from "../db";
 import { SavedInfo } from "../types";
 import { getArgv } from "../utils";
 
-const kinds = ["getInfo", "getInfos", "getPlaylistInfo", "getSong"] as const;
+const kinds = [
+  "getInfo",
+  "getInfos",
+  "getPlaylistInfo",
+  "getSong",
+  "getPlayStats",
+  "getTopPlayers",
+] as const;
 
 type ProcessInfoArgs = {
   kind: (typeof kinds)[0];
@@ -28,11 +35,17 @@ type ProcessSongArgs = {
   videoId: string;
 };
 
+type ProcessPlayStatsArgs = {
+  kind: (typeof kinds)[4] | (typeof kinds)[5];
+  days: number;
+};
+
 export type ProcessArgs =
   | ProcessInfoArgs
   | ProcessInfosArgs
   | ProcessPlaylistInfoArgs
-  | ProcessSongArgs;
+  | ProcessSongArgs
+  | ProcessPlayStatsArgs;
 
 export type ParentContext = {
   cachePath: string;
@@ -61,21 +74,29 @@ process.on("message", async (msgString: string) => {
   }
 
   switch (msg.kind) {
-    case "getInfo":
+    case kinds[0]:
       process.send(JSON.stringify(await _getInfo(msg.videoId)));
-      return;
+      break;
 
-    case "getInfos":
+    case kinds[1]:
       process.send(JSON.stringify(await _getInfos(msg.videoIds)));
-      return;
+      break;
 
-    case "getPlaylistInfo":
+    case kinds[2]:
       process.send(JSON.stringify(await _getPlaylistInfo(msg.playlistId)));
-      return;
+      break;
 
-    case "getSong":
+    case kinds[3]:
       process.send(JSON.stringify(await _getSong(msg.videoId)));
-      return;
+      break;
+
+    case kinds[4]:
+      process.send(JSON.stringify(await _getPlayStatsArgs(msg.days)));
+      break;
+
+    case kinds[5]:
+      process.send(JSON.stringify(await _getTopPlayers(msg.days)));
+      break;
   }
 });
 
@@ -170,4 +191,51 @@ export const _getSong = async (videoId: string) => {
       res(cachedFilePath);
     });
   });
+};
+
+export const _getPlayStatsArgs = async (days?: number) => {
+  const rows = (await db.allSync(
+    `
+    SELECT plays.username, video_info.info, count(*) play_count 
+    FROM plays 
+    LEFT JOIN video_info on plays.video_id = video_info.video_id 
+    ${
+      days
+        ? `WHERE plays.play_timestamp > DATETIME('now', '-${days} day') `
+        : ``
+    } 
+    GROUP BY plays.video_id, plays.username 
+    ORDER BY play_count desc 
+    LIMIT 5
+    ;
+  `
+  )) as Array<any>;
+  return rows
+    .filter((row) => row.info)
+    .map((row: any) => ({
+      username: row.username as string,
+      info: JSON.parse(row.info) as SavedInfo,
+      playCount: Number(row.play_count),
+    }));
+};
+
+export const _getTopPlayers = async (days?: number) => {
+  const rows = (await db.allSync(
+    `
+    SELECT username, count(*) play_count
+    FROM plays 
+    ${
+      days
+        ? `WHERE plays.play_timestamp > DATETIME('now', '-${days} day') `
+        : ``
+    } 
+    GROUP BY username
+    ORDER BY play_count desc
+    LIMIT 5
+  `
+  )) as Array<any>;
+  return rows.map((row: any) => ({
+    username: row.username as string,
+    playCount: Number(row.play_count),
+  }));
 };
