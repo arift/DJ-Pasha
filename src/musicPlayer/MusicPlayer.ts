@@ -21,9 +21,9 @@ import {
   VoiceState,
 } from "discord.js";
 import { getDb } from "./db";
+import { getInfo, getInfos, getSong } from "./MetaEngine";
 import { removeMusicPlayer } from "./musicPlayersByChannel";
 import { DB_PATH } from "./paths";
-import { getInfo, getInfos, getSong } from "./processor";
 import Queue, { QueueItem } from "./Queue";
 import { getArg, toHoursAndMinutes } from "./utils";
 

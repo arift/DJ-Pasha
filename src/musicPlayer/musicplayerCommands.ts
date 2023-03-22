@@ -12,13 +12,13 @@ import {
 } from "discord.js";
 import ytdl from "ytdl-core";
 import ytpl from "ytpl";
+import { getInfo, getPlaylistInfo, getTopPlayers } from "./MetaEngine";
 import MusicPlayer from "./MusicPlayer";
 import {
   addMusicPlayer,
   getMusicPlayer,
   hasMusicPlayer,
 } from "./musicPlayersByChannel";
-import { getInfo, getPlaylistInfo, getTopPlayers } from "./processor";
 import { SavedInfo } from "./types";
 
 const musicPlayerCheck = async (
