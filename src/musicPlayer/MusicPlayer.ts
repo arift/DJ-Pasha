@@ -93,7 +93,7 @@ class MusicPlayer {
       if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
-      } else {
+      } else if (this.playing) {
         this.stopDisconnectTimeout();
       }
     };
@@ -263,23 +263,30 @@ class MusicPlayer {
         ? totalQueueSize
         : pageSize + startRow;
 
-    const queueItemPage = this.queue.slice(startRow, lastRowIdx);
+    const queueInfos = (
+      await getInfos(this.queue.getAll().map((item) => item.id))
+    ).map((info, idx) => ({
+      info,
+      request: this.queue.get(idx),
+    }));
 
-    const playlistInfos = await getInfos(queueItemPage.map((item) => item.id));
+    const queueInfoPage = queueInfos.slice(startRow, lastRowIdx);
 
-    let totalQueueSeconds: number = 0;
+    let totalQueueSeconds: number = queueInfos.reduce(
+      (cum, qInfo) => cum + Number(qInfo.info.lengthSeconds),
+      0
+    );
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
 
-    if (playlistInfos.length) {
+    if (queueInfoPage.length) {
       const queueLines = [];
-      playlistInfos.forEach((info, idx) => {
+      queueInfoPage.forEach((qInfo, idx) => {
         queueLines.push(
-          `**${startRow + idx + 1}**: ${info.title} - *${formatUsername(
-            queueItemPage[idx].by,
-            queueItemPage[idx].byNickname
+          `**${startRow + idx + 1}**: ${qInfo.info.title} - *${formatUsername(
+            qInfo.request.by,
+            qInfo.request.byNickname
           )}*`
         );
-        totalQueueSeconds += Number(info.lengthSeconds);
       });
       const hiddenSongs = this.queue.size() - lastRowIdx;
 
@@ -345,7 +352,7 @@ class MusicPlayer {
         const page = startRow / pageSize + 1;
         const lastPage = Math.ceil(totalQueueSize / pageSize);
         embed.setFooter({
-          text: `Page ${page}/${lastPage}\nPage queue time: ${toHoursAndMinutes(
+          text: `Page ${page}/${lastPage}\nTotal number of songs in queue: ${this.queue.size()}\nTotal queue time: ${toHoursAndMinutes(
             totalQueueSeconds
           )}`,
         });
