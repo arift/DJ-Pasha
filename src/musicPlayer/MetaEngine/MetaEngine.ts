@@ -1,3 +1,4 @@
+import { format, formatISO } from "date-fns";
 import fs from "node:fs";
 import path from "node:path";
 import ytdl from "ytdl-core";
@@ -63,23 +64,6 @@ export class MetaEngine {
   };
 
   getPlaylistInfo = async (playlistId: string) => {
-    //TODO insert play list songs info. its all there
-    /**
-     *  {
-      title: 'Let Me Blow Ya Mind',
-      index: 8,
-      id: '5EPJgyX7rvI',
-      shortUrl: 'https://www.youtube.com/watch?v=5EPJgyX7rvI',
-      url: 'https://www.youtube.com/watch?v=5EPJgyX7rvI&list=PLli8P2WEwiaWe58IlqyDTugz57xs858GL&index=8',
-      author: [Object],
-      thumbnails: [Array],
-      bestThumbnail: [Object],
-      isLive: false,
-      duration: '3:51',
-      durationSec: 231,
-      isPlayable: true
-    },
-     */
     const playlistInfo = await ytpl(playlistId, {
       requestOptions: {
         headers: {
@@ -150,34 +134,96 @@ export class MetaEngine {
     });
   };
 
-  getPlayStats = async (days?: number) => {
-    const rows = (await this.db.allSync(
-      `
-        SELECT plays.username, video_info.info, count(*) play_count 
-        FROM plays 
-        LEFT JOIN video_info on plays.video_id = video_info.video_id 
-        ${
-          days
-            ? `WHERE plays.play_timestamp > DATETIME('now', '-${days} day') `
-            : ``
-        } 
-        GROUP BY plays.video_id, plays.username 
-        ORDER BY play_count desc 
-        LIMIT 5
-        ;
-      `
-    )) as Array<any>;
-    return rows
-      .filter((row) => row.info)
-      .map((row: any) => ({
-        username: row.username as string,
-        info: JSON.parse(row.info) as SavedInfo,
-        playCount: Number(row.play_count),
-      }));
+  getPlayStatsPerPlayer = async (
+    startDate?: Date,
+    endDate?: Date,
+    limit = 5
+  ) => {
+    let whereClause = "";
+    if (startDate) {
+      whereClause += "play_timestamp >= DATE($startDate)";
+      if (endDate) {
+        whereClause += " AND play_timestamp <= DATE($endDate)";
+      }
+    } else if (endDate) {
+      whereClause += "play_timestamp <= $endDate";
+    }
+
+    const query = `SELECT username, count(*) play_count 
+      FROM plays 
+      ${whereClause ? `WHERE ${whereClause}` : ""}
+      GROUP BY username 
+      ORDER BY play_count desc 
+      LIMIT $limit
+    `;
+    const params = {
+      $limit: limit,
+    };
+    if (startDate) {
+      params["$startDate"] = formatISO(startDate);
+    }
+    if (endDate) {
+      params["$endDate"] = formatISO(endDate);
+    }
+    const rows = (await this.db.allSync(query, params)) as Array<{
+      username: string;
+      play_count: number;
+    }>;
+
+    return rows.map((row) => ({
+      username: row.username,
+      playCount: row.play_count,
+    }));
+  };
+
+  generatePlayStatsText = async (startDate?: Date, endDate?: Date) => {
+    const stats = await this.getPlayStatsPerPlayer(startDate, endDate, 3);
+    const startDateFormatted = startDate
+      ? format(startDate, "MM/dd/yyyy")
+      : null;
+    const endDateFormatted = endDate ? format(endDate, "MM/dd/yyyy") : null;
+
+    let result = `Here are the top bogarters`;
+    if (startDateFormatted) {
+      result += ` from ${startDateFormatted}`;
+      if (endDateFormatted) {
+        result += ` to ${endDateFormatted}`;
+      } else {
+        result += ` and on`;
+      }
+    } else if (endDateFormatted) {
+      result += ` until ${endDateFormatted}`;
+    } else {
+      result += ` of all time.`;
+    }
+    result += ":\n";
+
+    result += stats
+      .slice(0, 3)
+      .map((stat, idx) => {
+        let emoji: string;
+        switch (idx) {
+          case 0:
+            emoji = ":first_place:";
+            break;
+          case 1:
+            emoji = ":second_place:";
+            break;
+          case 2:
+            emoji = ":third_place:";
+            break;
+          default:
+            emoji = "";
+            break;
+        }
+        return `${emoji} ${stat.username}: ${stat.playCount}`;
+      })
+      .join("\n");
+
+    return result;
   };
 
   getTopPlayers = async (days?: number) => {
-    mySlowFunction(20000);
     const rows = (await this.db.allSync(
       `
         SELECT username, count(*) play_count
@@ -198,16 +244,4 @@ export class MetaEngine {
       playCount: Number(row.play_count),
     }));
   };
-}
-
-function mySlowFunction(blockTime: number) {
-  console.time("mySlowFunction");
-  let result = 0;
-  let idx = 0;
-  const now = performance.now();
-  while (performance.now() - now < blockTime) {
-    idx++;
-    result += Math.atan(idx) * Math.tan(idx);
-  }
-  console.timeEnd(`mySlowFunction`);
 }

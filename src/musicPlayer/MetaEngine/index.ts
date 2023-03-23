@@ -35,15 +35,20 @@ export const getPlaylistInfo: MetaEngine["getPlaylistInfo"] = (args) => {
 export const getSong: MetaEngine["getSong"] = (args) => {
   return doWork("getSong", args);
 };
-export const getPlayStats: MetaEngine["getPlayStats"] = (args) => {
+export const getPlayStats: MetaEngine["getPlayStatsPerPlayer"] = (args) => {
   return doWork("getPlayStats", args);
 };
 export const getTopPlayers: MetaEngine["getTopPlayers"] = (args) => {
   return doWork("getTopPlayers", args);
 };
+export const generatePlayStatsText: MetaEngine["generatePlayStatsText"] = (
+  ...args
+) => {
+  return doWork("generatePlayStatsText", ...args);
+};
 
 let roundRobinIdx = 0;
-const doWork = <T>(kind: string, args: any) => {
+const doWork = <T>(kind: string, ...args: any) => {
   const { port1, port2 } = new MessageChannel();
   const promise = new Promise<T>((res) => {
     port2.on("message", res);

@@ -1,3 +1,4 @@
+import { startOfDay, sub } from "date-fns";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -12,7 +13,7 @@ import {
 } from "discord.js";
 import ytdl from "ytdl-core";
 import ytpl from "ytpl";
-import { getInfo, getPlaylistInfo, getTopPlayers } from "./MetaEngine";
+import { generatePlayStatsText, getInfo, getPlaylistInfo } from "./MetaEngine";
 import MusicPlayer from "./MusicPlayer";
 import {
   addMusicPlayer,
@@ -293,9 +294,8 @@ export const statsCommand = {
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
     try {
       await interaction.deferReply();
-      const embed = new EmbedBuilder()
-        .setColor("#33D7FF")
-        .setTitle("Select stat range:");
+      const embed = new EmbedBuilder().setColor("#33D7FF");
+
       const stat24Hr = new ButtonBuilder()
         .setCustomId(`stat.24hr`)
         .setStyle(ButtonStyle.Primary)
@@ -326,82 +326,59 @@ export const statsCommand = {
         filter: (i) => i.customId.includes("stat."),
       });
 
+      const getStatReply = async (rangeId) => {
+        buttons.forEach((btn) => btn.setDisabled(false));
+        let startDate: Date;
+        let endDate: Date;
+        switch (rangeId) {
+          case "stat.24hr":
+            stat24Hr.setDisabled(true);
+            startDate = startOfDay(sub(new Date(), { days: 1 }));
+            endDate = new Date();
+            break;
+          case "stat.week":
+            statWeek.setDisabled(true);
+            startDate = startOfDay(sub(new Date(), { days: 7 }));
+            endDate = new Date();
+            break;
+          case "stat.month":
+            statMonth.setDisabled(true);
+            startDate = startOfDay(sub(new Date(), { months: 1 }));
+            endDate = new Date();
+            break;
+          case "stat.year":
+            statYear.setDisabled(true);
+            startDate = startOfDay(sub(new Date(), { years: 1 }));
+            endDate = new Date();
+            break;
+          case "stat.all":
+            statAll.setDisabled(true);
+            break;
+        }
+
+        const reply = {
+          content: `${await generatePlayStatsText(startDate, endDate)}\n`,
+
+          components: [
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+              stat24Hr,
+              statWeek,
+              statMonth,
+              statYear,
+              statAll
+            ),
+          ],
+        };
+
+        return reply;
+      };
+
       collector.on("collect", async (buttonInteraction: ButtonInteraction) => {
         await buttonInteraction.deferUpdate();
         try {
-          console.log("Collected page");
-          let stats: Awaited<ReturnType<typeof getTopPlayers>>;
-
-          //reset buttons back to primary
-          buttons.forEach((btn) => btn.setDisabled(false));
-          let title: string;
-          switch (buttonInteraction.customId) {
-            case "stat.24hr":
-              stats = await getTopPlayers(1);
-              title = "Past 24 Hours:";
-              stat24Hr.setDisabled(true);
-              break;
-            case "stat.week":
-              stats = await getTopPlayers(7);
-              title = "Past 7 Days:";
-              statWeek.setDisabled(true);
-              break;
-            case "stat.month":
-              title = "Past Month:";
-              stats = await getTopPlayers(30);
-              statMonth.setDisabled(true);
-              break;
-            case "stat.year":
-              title = "Past Year:";
-              stats = await getTopPlayers(365);
-              statYear.setDisabled(true);
-              break;
-            case "stat.all":
-              title = "All Time:";
-              stats = await getTopPlayers();
-              statAll.setDisabled(true);
-              break;
-          }
-          await buttonInteraction.editReply({
-            content: "Top Bogarters",
-            embeds: [
-              embed
-                .setDescription(
-                  stats
-                    .map((stat, idx) => {
-                      let emoji: string;
-                      switch (idx) {
-                        case 0:
-                          emoji = ":first_place:";
-                          break;
-                        case 1:
-                          emoji = ":second_place:";
-                          break;
-                        case 2:
-                          emoji = ":third_place:";
-                          break;
-                        default:
-                          emoji = "";
-                          break;
-                      }
-                      return `${idx + 1} - ${emoji}${stat.username}: ${
-                        stat.playCount
-                      }`;
-                    })
-                    .join("\n")
-                )
-                .setTitle(title),
-            ],
-            components: [
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                stat24Hr,
-                statWeek,
-                statMonth,
-                statYear,
-                statAll
-              ),
-            ],
-          });
+          await buttonInteraction.editReply(
+            await getStatReply(buttonInteraction.customId)
+          );
         } catch (err) {
           console.error("Generate stats error: ", err);
           await buttonInteraction.editReply(
@@ -410,18 +387,7 @@ export const statsCommand = {
         }
       });
 
-      await interaction.editReply({
-        content: "Stats",
-        components: [
-          new ActionRowBuilder<ButtonBuilder>().addComponents(
-            stat24Hr,
-            statWeek,
-            statMonth,
-            statYear,
-            statAll
-          ),
-        ],
-      });
+      await interaction.editReply(await getStatReply("stat.week"));
     } catch (err) {
       await interaction.editReply(err.message);
       console.error(err);
