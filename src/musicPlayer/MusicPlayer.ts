@@ -22,7 +22,7 @@ import {
 } from "discord.js";
 import { getDb } from "./db";
 import { getInfo, getInfos, getSong } from "./MetaEngine";
-import { removeMusicPlayer } from "./musicPlayersByChannel";
+import { removeMusicPlayer } from "./musicPlayerInstance";
 import { DB_PATH } from "./paths";
 import Queue, { QueueItem } from "./Queue";
 import { getArg, toHoursAndMinutes } from "./utils";
@@ -93,7 +93,7 @@ class MusicPlayer {
       if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
         this.startDiconnectTimeout();
-      } else if (this.playing) {
+      } else if (this.playing && this.disconnectTimeout) {
         this.stopDisconnectTimeout();
       }
     };
@@ -129,11 +129,12 @@ class MusicPlayer {
     console.log("Disconnecting. Clearing everything up...");
     clearTimeout(this.disconnectTimeout);
     this.disconnectTimeout = null;
+    this.voiceConnection.removeAllListeners();
+    this.audioPlayer.removeAllListeners();
     this.voiceConnection.destroy();
     this.audioPlayer.stop();
-    this.audioPlayer.removeAllListeners();
     this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
-    removeMusicPlayer(this.voiceChannel);
+    removeMusicPlayer();
   };
 
   async playNextSong() {
