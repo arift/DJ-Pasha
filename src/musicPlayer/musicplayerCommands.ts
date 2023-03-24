@@ -1,4 +1,4 @@
-import { startOfDay, sub } from "date-fns";
+import { endOfDay, startOfDay, sub } from "date-fns";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -338,22 +338,22 @@ export const statsCommand = {
           case "stat.24hr":
             stat24Hr.setDisabled(true);
             startDate = startOfDay(sub(new Date(), { days: 1 }));
-            endDate = new Date();
+            endDate = endOfDay(new Date());
             break;
           case "stat.week":
             statWeek.setDisabled(true);
             startDate = startOfDay(sub(new Date(), { days: 7 }));
-            endDate = new Date();
+            endDate = endOfDay(new Date());
             break;
           case "stat.month":
             statMonth.setDisabled(true);
             startDate = startOfDay(sub(new Date(), { months: 1 }));
-            endDate = new Date();
+            endDate = endOfDay(new Date());
             break;
           case "stat.year":
             statYear.setDisabled(true);
             startDate = startOfDay(sub(new Date(), { years: 1 }));
-            endDate = new Date();
+            endDate = endOfDay(new Date());
             break;
           case "stat.all":
             statAll.setDisabled(true);
