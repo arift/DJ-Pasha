@@ -20,29 +20,10 @@ import {
   VoiceBasedChannel,
   VoiceState,
 } from "discord.js";
-import { getDb } from "./db";
-import { getInfo, getInfos, getSong } from "./MetaEngine";
+import { getInfo, getInfos, getSong, insertNewPlay } from "./MetaEngine";
 import { removeMusicPlayer } from "./musicPlayerInstance";
-import { DB_PATH } from "./paths";
 import Queue, { QueueItem } from "./Queue";
 import { getArg, toHoursAndMinutes } from "./utils";
-
-const db = getDb(DB_PATH);
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS video_info (
-    video_id TEXT PRIMARY KEY, 
-    info TEXT, 
-    insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-  )`);
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS plays (
-    video_id TEXT, 
-    username TEXT, 
-    play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-    PRIMARY KEY (video_id, username, play_timestamp)
-  )`);
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
@@ -156,25 +137,12 @@ class MusicPlayer {
       this.nowPlaying = nextItem;
 
       //play next song
-      console.log(`Playing next song: ${nextItem.id}`);
-      const filePath = await getSong(nextItem.id);
+      console.log(`Playing next song: ${this.nowPlaying.id}`);
+      const filePath = await getSong(this.nowPlaying.id);
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
-        await db.runSync(
-          `
-            INSERT OR IGNORE INTO plays (video_id, username)
-            VALUES ($videoId, $username)
-          `,
-          {
-            $videoId: nextItem.id,
-            $username: nextItem.by,
-          }
-        );
-        await db.runSync("commit");
-        console.log(
-          `Added new stat for video ${nextItem.id} and user ${nextItem.by}`
-        );
+        await insertNewPlay(this.nowPlaying.id, this.nowPlaying.by);
       } catch (err) {
         console.error("Error with stat recording. Ignoring it: ", err);
       }

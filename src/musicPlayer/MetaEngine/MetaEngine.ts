@@ -7,18 +7,32 @@ import { Database, getDb } from "../db";
 import { SavedInfo } from "../types";
 
 export class MetaEngine {
-  db: Database;
-  cachePath: string;
-  stagingPath: string;
+  #db: Database;
+  #cachePath: string;
+  #stagingPath: string;
 
   constructor(cachePath: string, stagingPath: string, dbPath: string) {
-    this.cachePath = cachePath;
-    this.stagingPath = stagingPath;
-    this.db = getDb(dbPath);
+    this.#cachePath = cachePath;
+    this.#stagingPath = stagingPath;
+    this.#db = getDb(dbPath);
+    this.#db.run(`
+      CREATE TABLE IF NOT EXISTS video_info (
+      video_id TEXT PRIMARY KEY, 
+      info TEXT, 
+      insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`);
+
+    this.#db.run(`
+      CREATE TABLE IF NOT EXISTS plays (
+      video_id TEXT, 
+      username TEXT, 
+      play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
+      PRIMARY KEY (video_id, username, play_timestamp)
+    )`);
   }
 
   getInfo = async (videoId: string) => {
-    const row = await this.db.getSync(
+    const row = await this.#db.getSync(
       "select * from video_info where video_id = $videoId",
       {
         $videoId: videoId,
@@ -45,11 +59,11 @@ export class MetaEngine {
       videoUrl: info.videoDetails.video_url,
     };
 
-    await this.db.runSync(
+    await this.#db.runSync(
       "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
       { $videoId: videoId, $info: JSON.stringify(savedInfo) }
     );
-    await this.db.runSync("commit");
+    await this.#db.runSync("commit");
 
     return savedInfo;
   };
@@ -84,12 +98,12 @@ export class MetaEngine {
       itemsQueryValues.push(JSON.stringify(savedInfo));
     });
     try {
-      this.db.runSync(
+      this.#db.runSync(
         "INSERT OR REPLACE INTO video_info (video_id, info) VALUES " +
           playlistInfo.items.map(() => "(?, ?)").join(", "),
         itemsQueryValues
       );
-      this.db.runSync("commit");
+      this.#db.runSync("commit");
     } catch (err) {
       console.log("Err", err);
     }
@@ -100,7 +114,7 @@ export class MetaEngine {
   getSong = async (videoId: string) => {
     return new Promise<string>((res, rej) => {
       const t = Date.now();
-      const cachedFilePath = path.resolve(this.cachePath, videoId);
+      const cachedFilePath = path.resolve(this.#cachePath, videoId);
 
       if (fs.existsSync(cachedFilePath)) {
         res(cachedFilePath);
@@ -108,7 +122,7 @@ export class MetaEngine {
       }
 
       console.log(`Song not in cache, downloading it: [${videoId}]`);
-      const stagingFilePath = path.resolve(this.stagingPath, videoId);
+      const stagingFilePath = path.resolve(this.#stagingPath, videoId);
       const ytStream = ytdl(videoId, {
         filter: "audioonly",
         quality: "highestaudio",
@@ -141,12 +155,14 @@ export class MetaEngine {
   ) => {
     let whereClause = "";
     if (startDate) {
-      whereClause += "play_timestamp >= DATE($startDate)";
+      whereClause +=
+        "DATETIME(play_timestamp, 'localtime') >= DATE($startDate)";
       if (endDate) {
-        whereClause += " AND play_timestamp <= DATE($endDate)";
+        whereClause +=
+          " AND DATETIME(play_timestamp, 'localtime') <= DATE($endDate)";
       }
     } else if (endDate) {
-      whereClause += "play_timestamp <= $endDate";
+      whereClause += "DATETIME(play_timestamp, 'localtime') <= $endDate";
     }
 
     const query = `SELECT username, count(*) play_count 
@@ -165,7 +181,7 @@ export class MetaEngine {
     if (endDate) {
       params["$endDate"] = formatISO(endDate);
     }
-    const rows = (await this.db.allSync(query, params)) as Array<{
+    const rows = (await this.#db.allSync(query, params)) as Array<{
       username: string;
       play_count: number;
     }>;
@@ -223,25 +239,18 @@ export class MetaEngine {
     return result;
   };
 
-  getTopPlayers = async (days?: number) => {
-    const rows = (await this.db.allSync(
+  insertNewPlay = async (videoId: string, username: string) => {
+    console.log(`Adding new stat for video ${videoId} and user ${username}`);
+    await this.#db.runSync(
       `
-        SELECT username, count(*) play_count
-        FROM plays 
-        ${
-          days
-            ? `WHERE plays.play_timestamp > DATETIME('now', '-${days} day') `
-            : ``
-        } 
-        GROUP BY username
-        ORDER BY play_count desc
-        LIMIT 5
-      `
-    )) as Array<any>;
-
-    return rows.map((row: any) => ({
-      username: row.username as string,
-      playCount: Number(row.play_count),
-    }));
+        INSERT OR IGNORE INTO plays (video_id, username)
+        VALUES ($videoId, $username)
+      `,
+      {
+        $videoId: videoId,
+        $username: username,
+      }
+    );
+    await this.#db.runSync("commit");
   };
 }

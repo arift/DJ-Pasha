@@ -38,13 +38,13 @@ export const getSong: MetaEngine["getSong"] = (args) => {
 export const getPlayStats: MetaEngine["getPlayStatsPerPlayer"] = (args) => {
   return doWork("getPlayStats", args);
 };
-export const getTopPlayers: MetaEngine["getTopPlayers"] = (args) => {
-  return doWork("getTopPlayers", args);
-};
 export const generatePlayStatsText: MetaEngine["generatePlayStatsText"] = (
   ...args
 ) => {
   return doWork("generatePlayStatsText", ...args);
+};
+export const insertNewPlay: MetaEngine["insertNewPlay"] = (...args) => {
+  return doWork("insertNewPlay", ...args);
 };
 
 let roundRobinIdx = 0;
