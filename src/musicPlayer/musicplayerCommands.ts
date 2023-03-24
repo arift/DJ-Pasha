@@ -432,6 +432,6 @@ export const commands = {
   [moveCommand.data.name]: moveCommand,
   [shuffleCommand.data.name]: shuffleCommand,
   [skipCommand.data.name]: skipCommand,
-  //[statsCommand.data.name]: statsCommand,
+  [statsCommand.data.name]: statsCommand,
   [help.data.name]: help,
 };
