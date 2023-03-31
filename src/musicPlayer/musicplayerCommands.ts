@@ -54,6 +54,7 @@ export const playCommand = {
       await interaction.editReply(
         `:warning: You must be in a voice channel to use DJ Pasha!`
       );
+      console.log("Not in voice chat.");
       return;
     }
     try {
@@ -405,7 +406,7 @@ export const help = {
     .setName("help")
     .setDescription("Music player help."),
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
-    interaction.reply({
+    await interaction.reply({
       content: "",
       embeds: [
         new EmbedBuilder()

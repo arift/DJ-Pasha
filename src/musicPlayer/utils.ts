@@ -48,3 +48,10 @@ export const getArg = (argument: string, options: Array<any>) => {
 export const getArgv = (argument: string) => {
   return getArg(argument, process.argv);
 };
+
+export const formatUsername = (username: string, nickname: string | null) => {
+  if (nickname) {
+    return `${nickname} (${username})`;
+  }
+  return username;
+};

@@ -9,7 +9,6 @@ import {
 import {
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonInteraction,
   ButtonStyle,
   Client,
   EmbedBuilder,
@@ -23,7 +22,7 @@ import {
 import { getInfo, getInfos, getSong, insertNewPlay } from "./MetaEngine";
 import { removeMusicPlayer } from "./musicPlayerInstance";
 import Queue, { QueueItem } from "./Queue";
-import { getArg, toHoursAndMinutes } from "./utils";
+import { formatUsername, getArg, toHoursAndMinutes } from "./utils";
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
@@ -89,12 +88,14 @@ class MusicPlayer {
     });
   }
 
-  startDiconnectTimeout = () => {
+  startDiconnectTimeout = (minutes: number = 1) => {
     if (this.disconnectTimeout) {
       return;
     }
-    console.log("Starting disconnect timeout.");
-    this.disconnectTimeout = setTimeout(this.disconnect, 60000);
+    console.log(
+      "Starting disconnect timeout. Will disconnect in ${minutes} minutes"
+    );
+    this.disconnectTimeout = setTimeout(this.disconnect, minutes * 60 * 1000);
   };
 
   stopDisconnectTimeout = () => {
@@ -158,7 +159,11 @@ class MusicPlayer {
   }
 
   addSong(request: QueueItem | Array<QueueItem>) {
-    console.log(`Adding to queue: `, request);
+    if (Array.isArray(request)) {
+      console.log(`Adding to queue playlist with ${request.length} songs`);
+    } else {
+      console.log(`Adding to queue ${request.url} by ${request.by}`);
+    }
     this.queue.enqueue(request);
   }
 
@@ -186,6 +191,15 @@ class MusicPlayer {
   shuffle() {
     console.log("Shuffling queue...");
     this.queue.shuffle();
+  }
+
+  pause() {
+    if (this.audioPlayer.state.status === AudioPlayerStatus.Paused) {
+      this.audioPlayer.unpause();
+    } else {
+      this.audioPlayer.pause();
+      this.startDiconnectTimeout(10);
+    }
   }
 
   async skip() {
@@ -219,18 +233,13 @@ class MusicPlayer {
   }
 
   async getQueueStatus(startRow = 0, pageSize = 10) {
-    const toSend: InteractionUpdateOptions = {
+    const interactionUpdate: InteractionUpdateOptions = {
       content: "",
       embeds: [],
       components: [],
     };
 
     console.log("Showing queue starting from row ", startRow);
-    const totalQueueSize = this.queue.size();
-    const lastRowIdx =
-      totalQueueSize < pageSize + startRow
-        ? totalQueueSize
-        : pageSize + startRow;
 
     const queueInfos = (
       await getInfos(this.queue.getAll().map((item) => item.id))
@@ -239,113 +248,122 @@ class MusicPlayer {
       request: this.queue.get(idx),
     }));
 
-    const queueInfoPage = queueInfos.slice(startRow, lastRowIdx);
-
     let totalQueueSeconds: number = queueInfos.reduce(
       (cum, qInfo) => cum + Number(qInfo.info.lengthSeconds),
       0
     );
+
+    const queueLines = queueInfos.map(
+      (qInfo, idx) =>
+        `**${idx + 1}**: ${qInfo.info.title} - *${formatUsername(
+          qInfo.request.by,
+          qInfo.request.byNickname
+        )}*`
+    );
+
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
 
-    if (queueInfoPage.length) {
-      const queueLines = [];
-      queueInfoPage.forEach((qInfo, idx) => {
-        queueLines.push(
-          `**${startRow + idx + 1}**: ${qInfo.info.title} - *${formatUsername(
-            qInfo.request.by,
-            qInfo.request.byNickname
-          )}*`
-        );
+    if (queueLines.length === 0) {
+      embed.setDescription("Queue is empty");
+    } else if (queueLines.length > pageSize) {
+      const queuePageLines = queueLines.slice(0, pageSize);
+      embed.setDescription(queuePageLines.join("\n"));
+      if (this.queueCollector) {
+        this.queueCollector.stop();
+        this.queueCollector = null;
+      }
+      this.queueCollector = this.textChannel.createMessageComponentCollector({
+        filter: (i) => i.customId.includes("--startIdx"),
       });
-      const hiddenSongs = this.queue.size() - lastRowIdx;
-
       const nextButton = new ButtonBuilder()
-        .setCustomId(`--queuePage=${lastRowIdx}`)
-        .setDisabled(hiddenSongs === 0)
         .setStyle(ButtonStyle.Primary)
+        .setCustomId(`--startIdx=${pageSize}`)
         .setLabel(`Next`);
 
       const prevButton = new ButtonBuilder()
-        .setCustomId(`--queuePage=${startRow - pageSize}`)
-        .setDisabled(startRow === 0)
         .setStyle(ButtonStyle.Primary)
+        .setCustomId(`--startIdx=${0}`)
+        .setDisabled(true)
         .setLabel("Previous");
 
-      //figure out if we need pagination
-      if (startRow > 0 || hiddenSongs > 0) {
-        //has page info
-        if (this.queueCollector) {
-          this.queueCollector.stop();
-          this.queueCollector = null;
-        }
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        prevButton,
+        nextButton
+      );
 
-        this.queueCollector = this.textChannel.createMessageComponentCollector({
-          filter: (i) => i.customId.includes("--queuePage"),
-        });
+      interactionUpdate.components.push(actionRow);
 
-        this.queueCollector.on(
-          "collect",
-          async (buttonInteraction: ButtonInteraction) => {
-            await buttonInteraction.deferUpdate();
-            const actionRow =
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                prevButton.setDisabled(true),
-                nextButton.setDisabled(true)
-              );
+      this.queueCollector.on("collect", async (buttonInteraction) => {
+        await buttonInteraction.deferUpdate();
 
-            console.log("Collected page");
-            const queuePage = getArg("--queuePage", [
-              buttonInteraction.customId,
-            ]);
-            await buttonInteraction.editReply({
-              ...toSend,
-              embeds: [{ ...embed, description: "Loading next page..." }],
-              components: [actionRow],
-            });
-            await buttonInteraction.editReply(
-              await this.getQueueStatus(Number(queuePage))
-            );
-          }
+        const queueInfos = (
+          await getInfos(this.queue.getAll().map((item) => item.id))
+        ).map((info, idx) => ({
+          info,
+          request: this.queue.get(idx),
+        }));
+
+        const startIdx = Number(
+          getArg("--startIdx", [buttonInteraction.customId])
         );
+        const lastQueueIdx = queueInfos.length - 1;
+        const endIdx =
+          startIdx + pageSize > lastQueueIdx
+            ? lastQueueIdx
+            : startIdx + pageSize;
 
-        this.queueCollector.on("end", (collected) => {
-          console.log(`Collected ${collected.size} items`);
-          this.queueCollector = null;
-        });
+        prevButton
+          .setCustomId(
+            `--startIdx=${startIdx - pageSize < 0 ? 0 : startIdx - pageSize}`
+          )
+          .setDisabled(startIdx === 0);
+        nextButton
+          .setCustomId(`--startIdx=${endIdx}`)
+          .setDisabled(lastQueueIdx === endIdx && startIdx !== 0);
 
-        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          prevButton,
-          nextButton
-        );
-        toSend.components.push(actionRow);
-        const page = startRow / pageSize + 1;
-        const lastPage = Math.ceil(totalQueueSize / pageSize);
-        embed.setFooter({
-          text: `Page ${page}/${lastPage}\nTotal number of songs in queue: ${this.queue.size()}\nTotal queue time: ${toHoursAndMinutes(
-            totalQueueSeconds
-          )}`,
-        });
-      } else {
-        //no pagination needed
-        embed.setFooter({
-          text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
-        });
-      }
+        const queueLines = queueInfos
+          .slice(startIdx, endIdx === startIdx ? endIdx + 1 : endIdx)
+          .map(
+            (qInfo, idx) =>
+              `**${idx + 1 + startIdx}**: ${
+                qInfo.info.title
+              } - *${formatUsername(
+                qInfo.request.by,
+                qInfo.request.byNickname
+              )}*`
+          );
 
-      embed.setDescription(queueLines.join("\n"));
+        const page = startIdx / pageSize + 1;
+        const lastPage = Math.ceil(lastQueueIdx / pageSize);
+        embed
+          .setFooter({
+            text: `Page ${page}/${lastPage}\nTotal number of songs in queue: ${
+              queueInfos.length
+            }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+          })
+          .setDescription(queueLines.join("\n"));
+
+        await buttonInteraction.editReply({
+          ...interactionUpdate,
+          embeds: [embed],
+          components: [actionRow],
+        });
+      });
+
+      this.queueCollector.on("end", async (collected) => {
+        console.log(`Collector end ${collected.size} items`);
+        this.queueCollector = null;
+      });
     } else {
-      embed.setDescription("Queue is empty");
+      embed
+        .setFooter({
+          text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+        })
+        .setDescription(queueLines.join("\n"));
     }
-    toSend.embeds.push(embed);
-
-    return toSend;
+    interactionUpdate.embeds.push(embed);
+    return interactionUpdate;
   }
 }
 
-const formatUsername = (username: string, nickname: string | null) => {
-  if (nickname) {
-    return `${nickname} (${username})`;
-  }
-  return username;
-};
 export default MusicPlayer;
