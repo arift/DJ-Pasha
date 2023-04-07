@@ -22,7 +22,25 @@ import {
 import { getInfo, getInfos, getSong, insertNewPlay } from "./MetaEngine";
 import { removeMusicPlayer } from "./musicPlayerInstance";
 import Queue, { QueueItem } from "./Queue";
+import { SavedInfo } from "./types";
 import { formatUsername, getArg, toHoursAndMinutes } from "./utils";
+
+const getPageFooter = (
+  page: number,
+  lastPage: number,
+  queueInfos: Array<{
+    info: SavedInfo;
+    request: QueueItem;
+  }>
+) => {
+  let totalQueueSeconds: number = queueInfos.reduce(
+    (cum, qInfo) => cum + Number(qInfo.info.lengthSeconds),
+    0
+  );
+  return `Page ${page}/${lastPage}\nTotal number of songs in queue: ${
+    queueInfos.length
+  }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`;
+};
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
@@ -93,7 +111,7 @@ class MusicPlayer {
       return;
     }
     console.log(
-      "Starting disconnect timeout. Will disconnect in ${minutes} minutes"
+      `Starting disconnect timeout. Will disconnect in ${minutes} minutes`
     );
     this.disconnectTimeout = setTimeout(this.disconnect, minutes * 60 * 1000);
   };
@@ -115,6 +133,8 @@ class MusicPlayer {
     this.audioPlayer.removeAllListeners();
     this.voiceConnection.destroy();
     this.audioPlayer.stop();
+    this.queueCollector.stop();
+    this.queueCollector = null;
     this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
     removeMusicPlayer();
   };
@@ -253,7 +273,7 @@ class MusicPlayer {
       0
     );
 
-    const queueLines = queueInfos.map(
+    const allQueueLines = queueInfos.map(
       (qInfo, idx) =>
         `**${idx + 1}**: ${qInfo.info.title} - *${formatUsername(
           qInfo.request.by,
@@ -263,10 +283,12 @@ class MusicPlayer {
 
     const embed = new EmbedBuilder().setColor("#33D7FF").setTitle("Next up:");
 
-    if (queueLines.length === 0) {
+    if (allQueueLines.length === 0) {
       embed.setDescription("Queue is empty");
-    } else if (queueLines.length > pageSize) {
-      const queuePageLines = queueLines.slice(0, pageSize);
+    } else if (allQueueLines.length > pageSize) {
+      const queuePageLines = allQueueLines.slice(0, pageSize);
+      const lastPage = Math.ceil(allQueueLines.length / pageSize);
+      embed.setFooter({ text: getPageFooter(1, lastPage, queueInfos) });
       embed.setDescription(queuePageLines.join("\n"));
       if (this.queueCollector) {
         this.queueCollector.stop();
@@ -292,7 +314,6 @@ class MusicPlayer {
       );
 
       interactionUpdate.components.push(actionRow);
-
       this.queueCollector.on("collect", async (buttonInteraction) => {
         await buttonInteraction.deferUpdate();
 
@@ -312,10 +333,9 @@ class MusicPlayer {
             ? lastQueueIdx
             : startIdx + pageSize;
 
+        const prevPageIdx = startIdx - pageSize < 0 ? 0 : startIdx - pageSize;
         prevButton
-          .setCustomId(
-            `--startIdx=${startIdx - pageSize < 0 ? 0 : startIdx - pageSize}`
-          )
+          .setCustomId(`--startIdx=${prevPageIdx}`)
           .setDisabled(startIdx === 0);
         nextButton
           .setCustomId(`--startIdx=${endIdx}`)
@@ -334,14 +354,18 @@ class MusicPlayer {
           );
 
         const page = startIdx / pageSize + 1;
-        const lastPage = Math.ceil(lastQueueIdx / pageSize);
+        const lastPage = Math.ceil(queueInfos.length / pageSize);
+        if (queueLines.length === 0) {
+          this.getQueueStatus(prevPageIdx, pageSize);
+          return;
+        }
         embed
           .setFooter({
-            text: `Page ${page}/${lastPage}\nTotal number of songs in queue: ${
-              queueInfos.length
-            }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
+            text: getPageFooter(page, lastPage, queueInfos),
           })
-          .setDescription(queueLines.join("\n"));
+          .setDescription(
+            queueLines.length === 0 ? "Empty." : queueLines.join("\n")
+          );
 
         await buttonInteraction.editReply({
           ...interactionUpdate,
@@ -359,7 +383,7 @@ class MusicPlayer {
         .setFooter({
           text: `Total queue time: ${toHoursAndMinutes(totalQueueSeconds)}`,
         })
-        .setDescription(queueLines.join("\n"));
+        .setDescription(allQueueLines.join("\n"));
     }
     interactionUpdate.embeds.push(embed);
     return interactionUpdate;
