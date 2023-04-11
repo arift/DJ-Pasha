@@ -133,8 +133,10 @@ class MusicPlayer {
     this.audioPlayer.removeAllListeners();
     this.voiceConnection.destroy();
     this.audioPlayer.stop();
-    this.queueCollector.stop();
-    this.queueCollector = null;
+    if (this.queueCollector) {
+      this.queueCollector.stop();
+      this.queueCollector = null;
+    }
     this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
     removeMusicPlayer();
   };
