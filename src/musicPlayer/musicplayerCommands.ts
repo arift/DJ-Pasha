@@ -201,7 +201,7 @@ export const clearCommand = {
   data: new SlashCommandBuilder()
     .setName("clear")
     .setDescription(
-      "Clear the queue. Leave from and to empty to clear the entire queue"
+      "Clear the queue. Leave `from` and `to` empty to clear the entire queue"
     )
     .addNumberOption((option) => {
       return option
