@@ -55,6 +55,19 @@ class Queue {
     this.onChangeQueue();
   }
 
+  clear(start?: number, end?: number) {
+    console.log("START", start);
+    console.log("end", end);
+    if (typeof start === "number" && typeof end !== "number") {
+      this.#queue.splice(start, this.#queue.length - start);
+    } else if (typeof start === "number" && typeof end === "number") {
+      this.#queue.splice(start, end - start + 1);
+    } else {
+      this.#queue = [];
+    }
+    this.onChangeQueue();
+  }
+
   move(fromIdx: number, toIdx: number) {
     if (
       toIdx < 0 ||

@@ -210,6 +210,10 @@ class MusicPlayer {
     this.queue.remove(position - 1);
   }
 
+  clear(start?: number, end?: number) {
+    this.queue.clear(start, end);
+  }
+
   shuffle() {
     console.log("Shuffling queue...");
     this.queue.shuffle();

@@ -197,6 +197,58 @@ export const moveCommand = {
   },
 };
 
+export const clearCommand = {
+  data: new SlashCommandBuilder()
+    .setName("clear")
+    .setDescription(
+      "Clear the queue. Leave from and to empty to clear the entire queue"
+    )
+    .addNumberOption((option) => {
+      return option
+        .setName("from")
+        .setDescription("from queue spot")
+        .setRequired(false);
+    })
+    .addNumberOption((option) => {
+      return option
+        .setName("to")
+        .setDescription(
+          "to queue spot (leave empty to delete all the way to the end)"
+        )
+        .setRequired(false);
+    }),
+  execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
+    try {
+      await interaction.deferReply();
+      if (await musicPlayerCheck(interaction)) return;
+      const from = interaction.options.getNumber("from", false);
+      const to = interaction.options.getNumber("to", false);
+      let fromIdx: number | undefined;
+      let toIdx: number | undefined;
+      let reply = "Queue cleared";
+      if (typeof from === "number") {
+        fromIdx = from - 1;
+        reply += ` from ${from}`;
+        if (typeof to === "number") {
+          toIdx = to - 1;
+          reply += ` to ${to}`;
+        } else {
+          reply += ` until end of queue.`;
+        }
+      }
+      reply += ".";
+      const { musicPlayer } = getMusicPlayer();
+      musicPlayer.clear(fromIdx, toIdx);
+
+      await interaction.editReply(reply);
+    } catch (err) {
+      await interaction.editReply(err.message);
+      console.error(err);
+      return;
+    }
+  },
+};
+
 export const removeCommand = {
   data: new SlashCommandBuilder()
     .setName("remove")
@@ -430,6 +482,7 @@ export const commands = {
   [queueCommand.data.name]: queueCommand,
   [playingCommand.data.name]: playingCommand,
   [removeCommand.data.name]: removeCommand,
+  [clearCommand.data.name]: clearCommand,
   [moveCommand.data.name]: moveCommand,
   [shuffleCommand.data.name]: shuffleCommand,
   [skipCommand.data.name]: skipCommand,

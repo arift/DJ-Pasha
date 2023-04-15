@@ -117,6 +117,7 @@ export class MetaEngine {
       const cachedFilePath = path.resolve(this.#cachePath, videoId);
 
       if (fs.existsSync(cachedFilePath)) {
+        console.log(`Song in cache: [${videoId}]`);
         res(cachedFilePath);
         return;
       }
