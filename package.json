@@ -1,13 +1,12 @@
 {
-  "name": "getting-started",
+  "name": "dj-pasha",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
   "scripts": {
     "build": "npx rimraf ./build && tsc -p tsconfig.json --outDir build",
     "start": "npm run-script build && node build/index.js"
   },
-  "author": "Shay DeWael",
+  "author": "Arif Topcu",
   "license": "MIT",
   "dependencies": {
     "@discordjs/voice": "^0.15.0",
