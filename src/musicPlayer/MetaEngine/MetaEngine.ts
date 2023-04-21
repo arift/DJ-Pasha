@@ -32,7 +32,7 @@ export class MetaEngine {
   }
 
   getInfo = async (videoId: string) => {
-    const row = await this.#db.getSync(
+    const row = await this.#db.getAsync(
       "select * from video_info where video_id = $videoId",
       {
         $videoId: videoId,
@@ -59,11 +59,11 @@ export class MetaEngine {
       videoUrl: info.videoDetails.video_url,
     };
 
-    await this.#db.runSync(
+    await this.#db.runAsync(
       "INSERT OR REPLACE INTO video_info (video_id, info) VALUES($videoId, $info)",
       { $videoId: videoId, $info: JSON.stringify(savedInfo) }
     );
-    await this.#db.runSync("commit");
+    await this.#db.runAsync("commit");
 
     return savedInfo;
   };
@@ -98,12 +98,12 @@ export class MetaEngine {
       itemsQueryValues.push(JSON.stringify(savedInfo));
     });
     try {
-      this.#db.runSync(
+      this.#db.runAsync(
         "INSERT OR REPLACE INTO video_info (video_id, info) VALUES " +
           playlistInfo.items.map(() => "(?, ?)").join(", "),
         itemsQueryValues
       );
-      this.#db.runSync("commit");
+      this.#db.runAsync("commit");
     } catch (err) {
       console.log("Err", err);
     }
@@ -182,7 +182,7 @@ export class MetaEngine {
     if (endDate) {
       params["$endDate"] = formatISO(endDate);
     }
-    const rows = (await this.#db.allSync(query, params)) as Array<{
+    const rows = (await this.#db.allAsync(query, params)) as Array<{
       username: string;
       play_count: number;
     }>;
@@ -242,7 +242,7 @@ export class MetaEngine {
 
   insertNewPlay = async (videoId: string, username: string) => {
     console.log(`Adding new stat for video ${videoId} and user ${username}`);
-    await this.#db.runSync(
+    await this.#db.runAsync(
       `
         INSERT OR IGNORE INTO plays (video_id, username)
         VALUES ($videoId, $username)
@@ -252,6 +252,6 @@ export class MetaEngine {
         $username: username,
       }
     );
-    await this.#db.runSync("commit");
+    await this.#db.runAsync("commit");
   };
 }
