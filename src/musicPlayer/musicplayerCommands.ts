@@ -159,7 +159,7 @@ export const queueCommand = {
 
 export const moveCommand = {
   data: new SlashCommandBuilder()
-    .setName("mv")
+    .setName("move")
     .setDescription(
       "Move a song in the queue. If `to` is not provided, it will move to the top of the queue."
     )
