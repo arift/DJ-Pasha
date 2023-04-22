@@ -7,7 +7,7 @@ let PROGRAM_FILES_ROOT = getArgv("--appDir") ?? "";
 export const APP_DIR = path.resolve(PROGRAM_FILES_ROOT, "PashaPlayerFiles");
 export const CACHE_PATH = path.resolve(APP_DIR, "cache");
 export const STAGING_PATH = path.resolve(CACHE_PATH, "staging");
-export const DB_PATH = path.resolve("cache.db");
+export const DB_PATH = path.resolve("app.db");
 
 console.log(`Setting app directory to ${APP_DIR}`);
 
