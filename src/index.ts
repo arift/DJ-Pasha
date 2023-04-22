@@ -51,6 +51,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const rest = new REST({ version: "10" }).setToken(
       process.env.DISCORD_TOKEN
     );
+    console.log("Loading for GUILD ID " + process.env.GUILD_ID);
 
     await rest.put(
       Routes.applicationGuildCommands(process.env.APP_ID, process.env.GUILD_ID),
