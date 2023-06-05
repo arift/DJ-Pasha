@@ -194,7 +194,7 @@ export class MetaEngine {
   };
 
   generatePlayStatsText = async (startDate?: Date, endDate?: Date) => {
-    const stats = await this.getPlayStatsPerPlayer(startDate, endDate, 3);
+    const stats = await this.getPlayStatsPerPlayer(startDate, endDate, 5);
     const startDateFormatted = startDate
       ? format(startDate, "MM/dd/yyyy")
       : null;
@@ -237,6 +237,14 @@ export class MetaEngine {
       })
       .join("\n");
 
+    result += "\n\n----------------------\n";
+    result += "Honorable mentions:\n";
+    result += stats
+      .slice(3)
+      .map((stat, idx) => {
+        return `${idx + 4}. ${stat.username}: ${stat.playCount}`;
+      })
+      .join("\n");
     return result;
   };
 

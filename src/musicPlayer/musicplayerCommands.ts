@@ -351,7 +351,6 @@ export const statsCommand = {
   execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
     try {
       await interaction.deferReply();
-      const embed = new EmbedBuilder().setColor("#33D7FF");
 
       const stat24Hr = new ButtonBuilder()
         .setCustomId(`stat.24hr`)
