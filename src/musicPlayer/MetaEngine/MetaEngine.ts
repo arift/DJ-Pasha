@@ -243,7 +243,7 @@ export class MetaEngine {
       })
       .join("\n");
 
-    result += `\n\n${this.chartStatsText(stats)}`;
+    result += `\n${this.chartStatsText(stats)}`;
 
     return result;
   };
@@ -271,12 +271,12 @@ export class MetaEngine {
         bar += "█";
       }
 
-      // Then add the fractional part.  The Unicode code points for
-      // block elements are (8/8), (7/8), (6/8), ... , so need to
-      // work backwards.
-      if (remainder > 0) {
-        bar += String.fromCharCode("█".charCodeAt(0) + (8 - remainder));
-      }
+      // // Then add the fractional part.  The Unicode code points for
+      // // block elements are (8/8), (7/8), (6/8), ... , so need to
+      // // work backwards.
+      // if (remainder > 0) {
+      //   bar += String.fromCharCode("█".charCodeAt(0) + (8 - remainder));
+      // }
 
       // If the bar is empty, add a left one-eighth block
       if (bar.length === 0) {
@@ -289,7 +289,7 @@ export class MetaEngine {
       );
       result.push(`${paddedName} ▏${paddedNum} ${bar}`);
     });
-    return `\n\`${result.join("\n")}\``;
+    return `\`\n${result.join("\n")}\``;
   };
 
   insertNewPlay = async (videoId: string, username: string) => {
