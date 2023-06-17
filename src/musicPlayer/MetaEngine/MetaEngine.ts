@@ -271,13 +271,6 @@ export class MetaEngine {
         bar += "█";
       }
 
-      // // Then add the fractional part.  The Unicode code points for
-      // // block elements are (8/8), (7/8), (6/8), ... , so need to
-      // // work backwards.
-      // if (remainder > 0) {
-      //   bar += String.fromCharCode("█".charCodeAt(0) + (8 - remainder));
-      // }
-
       // If the bar is empty, add a left one-eighth block
       if (bar.length === 0) {
         bar = "▏";
