@@ -11,7 +11,7 @@ type onChange = (queue: Array<QueueItem>) => void;
 
 class Queue {
   #queue: Array<QueueItem>;
-  onChange: onChange | null;
+  onChange?: onChange;
   constructor({ onChange }: { onChange?: onChange }) {
     this.#queue = [];
     this.onChange = onChange;

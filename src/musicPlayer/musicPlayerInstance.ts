@@ -4,7 +4,7 @@ import MusicPlayer from "./MusicPlayer";
 let currenPlayer: {
   musicPlayer: MusicPlayer;
   voiceChannel: VoiceBasedChannel;
-};
+} | null;
 
 export const addMusicPlayer = (
   voiceChannel: VoiceBasedChannel,

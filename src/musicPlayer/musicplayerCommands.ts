@@ -47,7 +47,7 @@ export const playCommand = {
     const nickname = (interaction.member as GuildMember).nickname;
     const voiceChannel = (interaction.member as GuildMember).voice.channel;
     const textChannel = interaction.channel;
-    const url = interaction.options.getString("url").trim();
+    const url = interaction.options?.getString("url")?.trim();
 
     let firstTimeText: string;
     if (!voiceChannel) {
@@ -75,10 +75,12 @@ export const playCommand = {
         return;
       }
 
-      const { musicPlayer } = getMusicPlayer();
+      const currenPlayer = getMusicPlayer();
+      if (!currenPlayer) throw new Error("No music player");
+      const { musicPlayer } = currenPlayer;
       //check if it's playlist
-      if (ytpl.validateID(url)) {
-        const playlistId = await ytpl.getPlaylistID(url);
+      if (ytpl.validateID(url ?? "")) {
+        const playlistId = await ytpl.getPlaylistID(url!);
         const playlist = await getPlaylistInfo(playlistId);
 
         musicPlayer.addSong(
@@ -91,13 +93,13 @@ export const playCommand = {
         );
 
         await interaction.editReply(
-          `${firstTimeText ? `${firstTimeText}\n\n` : ""}:notes: Added **${
+          `${firstTimeText! ? `${firstTimeText}\n\n` : ""}:notes: Added **${
             playlist.title
           }** playlist to the queue with ${playlist.items.length} songs.`
         );
-      } else if (ytdl.validateURL(url)) {
+      } else if (ytdl.validateURL(url!)) {
         //single song
-        const id = ytdl.getVideoID(url);
+        const id = ytdl.getVideoID(url!);
         let info: SavedInfo;
         try {
           info = await getInfo(id);
@@ -108,7 +110,7 @@ export const playCommand = {
         }
         musicPlayer.addSong({
           id,
-          url,
+          url: url!,
           by: username,
           byNickname: nickname,
         });
@@ -148,7 +150,9 @@ export const queueCommand = {
     try {
       await interaction.deferReply();
       if (await musicPlayerCheck(interaction)) return;
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
       await interaction.editReply(await musicPlayer.getQueueStatus());
     } catch (err) {
       console.error("Error in queue: ", err);
@@ -184,7 +188,10 @@ export const moveCommand = {
 
       const from = interaction.options.getNumber("from");
       const to = interaction.options.getNumber("to", false) ?? 1;
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+      if (from === null) throw new Error("Missing from");
       musicPlayer.move(from, to);
       const msgOptions = await musicPlayer.getQueueStatus();
       msgOptions.content = `Moved song in position ${from} to ${to}`;
@@ -237,7 +244,9 @@ export const clearCommand = {
         }
       }
       reply += ".";
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
       musicPlayer.clear(fromIdx, toIdx);
 
       await interaction.editReply(reply);
@@ -265,7 +274,12 @@ export const removeCommand = {
       const queuePosition = interaction.options.getNumber("position");
       if (await musicPlayerCheck(interaction)) return;
 
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+
+      if (!queuePosition) throw new Error("Missing queue position");
+
       musicPlayer.remove(queuePosition);
       const msgOptions = await musicPlayer.getQueueStatus();
       msgOptions.content = `Removed song from queue position ${queuePosition}`;
@@ -287,7 +301,10 @@ export const skipCommand = {
       await interaction.deferReply();
       if (await musicPlayerCheck(interaction)) return;
 
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+
       await musicPlayer.skip();
       await interaction.editReply("Skipped song.");
     } catch (err) {
@@ -308,7 +325,10 @@ export const shuffleCommand = {
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(interaction)) return;
 
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+
       musicPlayer.shuffle();
 
       const msgOptions = await musicPlayer.getQueueStatus();
@@ -332,7 +352,10 @@ export const playingCommand = {
       const voiceChannel = (interaction.member as GuildMember).voice.channel;
       if (await musicPlayerCheck(interaction)) return;
 
-      const { musicPlayer } = getMusicPlayer();
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+
       await interaction.editReply(await musicPlayer.getNowPlayingStatus());
     } catch (err) {
       await interaction.editReply(err.message);
@@ -378,6 +401,8 @@ export const statsCommand = {
         .setLabel(`All Time`);
       const buttons = [stat24Hr, statWeek, statMonth, statYear, statAll];
 
+      if (!interaction.channel) throw new Error("No channel");
+
       const collector = interaction.channel.createMessageComponentCollector({
         filter: (i) => i.customId.includes("stat."),
       });
@@ -413,7 +438,7 @@ export const statsCommand = {
         }
 
         const reply = {
-          content: `${await generatePlayStatsText(startDate, endDate)}\n`,
+          content: `${await generatePlayStatsText(startDate!, endDate!)}\n`,
 
           components: [
             new ActionRowBuilder<ButtonBuilder>().addComponents(

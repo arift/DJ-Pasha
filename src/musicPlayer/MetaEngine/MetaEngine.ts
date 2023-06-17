@@ -54,7 +54,7 @@ export class MetaEngine {
     const savedInfo: SavedInfo = {
       title: info.videoDetails.title,
       ownerChannelName: info.videoDetails.ownerChannelName,
-      description: info.videoDetails.description,
+      description: info.videoDetails.description ?? "",
       lengthSeconds: info.videoDetails.lengthSeconds,
       videoUrl: info.videoDetails.video_url,
     };
@@ -81,11 +81,11 @@ export class MetaEngine {
     const playlistInfo = await ytpl(playlistId, {
       requestOptions: {
         headers: {
-          cookie: process.env.COOKIE,
+          cookie: process.env.COOKIE ?? "",
         },
       },
     });
-    let itemsQueryValues = [];
+    let itemsQueryValues: string[] = [];
     playlistInfo.items.forEach((info) => {
       const savedInfo: SavedInfo = {
         title: info.title,

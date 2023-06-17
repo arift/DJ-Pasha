@@ -6,7 +6,7 @@ import { MetaEngine } from "./MetaEngine";
 const numOfCpus = cpus().length;
 const workerCount = Math.ceil(numOfCpus / 2);
 
-const workers = [];
+const workers: Worker[] = [];
 console.log(`Starting ${workerCount} workers`);
 
 if (isMainThread) {

@@ -12,10 +12,10 @@ import {
   ButtonStyle,
   Client,
   EmbedBuilder,
-  GuildTextBasedChannel,
   InteractionCollector,
   InteractionUpdateOptions,
   MessageCreateOptions,
+  TextBasedChannel,
   VoiceBasedChannel,
   VoiceState,
 } from "discord.js";
@@ -44,7 +44,7 @@ const getPageFooter = (
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;
-  textChannel: GuildTextBasedChannel;
+  textChannel: TextBasedChannel;
   audioPlayer: AudioPlayer;
   client: Client;
   voiceConnection: VoiceConnection;
@@ -56,7 +56,7 @@ class MusicPlayer {
   onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
   constructor(
     voiceChannel: VoiceBasedChannel,
-    textChannel: GuildTextBasedChannel,
+    textChannel: TextBasedChannel | null,
     client: Client
   ) {
     console.log(
@@ -66,6 +66,7 @@ class MusicPlayer {
       voiceChannel.guild.name
     );
     this.voiceChannel = voiceChannel;
+    if (!textChannel) throw new Error("Text channel is null");
     this.textChannel = textChannel;
     this.client = client;
     this.voiceConnection = joinVoiceChannel({
@@ -127,7 +128,7 @@ class MusicPlayer {
 
   disconnect = () => {
     console.log("Disconnecting. Clearing everything up...");
-    clearTimeout(this.disconnectTimeout);
+    clearTimeout(this.disconnectTimeout ?? undefined);
     this.disconnectTimeout = null;
     this.voiceConnection.removeAllListeners();
     this.audioPlayer.removeAllListeners();
@@ -319,7 +320,7 @@ class MusicPlayer {
         nextButton
       );
 
-      interactionUpdate.components.push(actionRow);
+      interactionUpdate.components?.push(actionRow);
       this.queueCollector.on("collect", async (buttonInteraction) => {
         await buttonInteraction.deferUpdate();
 
@@ -391,7 +392,7 @@ class MusicPlayer {
         })
         .setDescription(allQueueLines.join("\n"));
     }
-    interactionUpdate.embeds.push(embed);
+    interactionUpdate.embeds?.push(embed);
     return interactionUpdate;
   }
 }
