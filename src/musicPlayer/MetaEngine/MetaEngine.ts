@@ -243,12 +243,12 @@ export class MetaEngine {
       })
       .join("\n");
 
-    result += `\n${this.chartStatsText(stats)}`;
+    result += `\n${this.generateChartStatsText(stats)}`;
 
     return result;
   };
 
-  chartStatsText = (
+  generateChartStatsText = (
     stats: Awaited<ReturnType<MetaEngine["getPlayStatsPerPlayer"]>>
   ) => {
     const maxValue = Math.max(...stats.map((stat) => stat.playCount));
