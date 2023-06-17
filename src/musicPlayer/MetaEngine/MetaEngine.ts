@@ -5,6 +5,7 @@ import ytdl from "ytdl-core";
 import ytpl from "ytpl";
 import { Database, getDb } from "../db";
 import { SavedInfo } from "../types";
+import { rjust } from "../utils";
 
 export class MetaEngine {
   #db: Database;
@@ -216,7 +217,6 @@ export class MetaEngine {
     result += ":\n";
 
     result += stats
-      .slice(0, 3)
       .map((stat, idx) => {
         let emoji: string;
         switch (idx) {
@@ -229,6 +229,12 @@ export class MetaEngine {
           case 2:
             emoji = ":third_place:";
             break;
+          case 3:
+            emoji = "4)";
+            break;
+          case 4:
+            emoji = "5)";
+            break;
           default:
             emoji = "";
             break;
@@ -237,15 +243,53 @@ export class MetaEngine {
       })
       .join("\n");
 
-    result += "\n\n----------------------\n";
-    result += "Honorable mentions:\n";
-    result += stats
-      .slice(3)
-      .map((stat, idx) => {
-        return `${idx + 4}. ${stat.username}: ${stat.playCount}`;
-      })
-      .join("\n");
+    result += `\n\n${this.chartStatsText(stats)}`;
+
     return result;
+  };
+
+  chartStatsText = (
+    stats: Awaited<ReturnType<MetaEngine["getPlayStatsPerPlayer"]>>
+  ) => {
+    const maxValue = Math.max(...stats.map((stat) => stat.playCount));
+    const increment = maxValue / 25;
+    const longestLabelLength = Math.max(
+      ...stats.map((stat) => stat.username.length)
+    );
+    const longestPlayCountLength = Math.max(
+      ...stats.map((stat) => stat.playCount.toString().length)
+    );
+
+    let result: string[] = [];
+    stats.forEach((stat) => {
+      const playCount = stat.playCount;
+      const barChunks = Math.floor(Math.floor((playCount * 8) / increment) / 8);
+      const remainder = Math.floor((playCount * 8) / increment) % 8;
+      // First draw the full width chunks
+      let bar = "";
+      for (let i = 0; i < barChunks; i++) {
+        bar += "█";
+      }
+
+      // Then add the fractional part.  The Unicode code points for
+      // block elements are (8/8), (7/8), (6/8), ... , so need to
+      // work backwards.
+      if (remainder > 0) {
+        bar += String.fromCharCode("█".charCodeAt(0) + (8 - remainder));
+      }
+
+      // If the bar is empty, add a left one-eighth block
+      if (bar.length === 0) {
+        bar = "▏";
+      }
+      const paddedName = rjust(stat.username, longestLabelLength);
+      const paddedNum = rjust(
+        stat.playCount.toString(),
+        longestPlayCountLength
+      );
+      result.push(`${paddedName} ▏${paddedNum} ${bar}`);
+    });
+    return `\n\`${result.join("\n")}\``;
   };
 
   insertNewPlay = async (videoId: string, username: string) => {

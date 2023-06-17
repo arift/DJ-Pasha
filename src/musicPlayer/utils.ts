@@ -55,3 +55,14 @@ export const formatUsername = (username: string, nickname: string | null) => {
   }
   return username;
 };
+
+export const rjust = (s: string, num: number, padding: string = " ") => {
+  let res = s;
+  if (s.length < num) {
+    for (var i = 0; i <= num - s.length - 1; i++) {
+      res = padding + res;
+    }
+  }
+
+  return res;
+};
