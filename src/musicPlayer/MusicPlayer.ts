@@ -51,6 +51,7 @@ class MusicPlayer {
   queueCollector: InteractionCollector<any> | null = null;
   queue: Queue;
   playing = false;
+  repeatingSong = false;
   nowPlaying: QueueItem | null = null;
   disconnectTimeout: NodeJS.Timeout | null;
   onVoiceStateUpdate: (oldState: VoiceState, newState: VoiceState) => void;
@@ -144,7 +145,12 @@ class MusicPlayer {
 
   async playNextSong() {
     this.playing = true; //this needs to come before pop in order to make sure the onChange properly caches the next song since it needs playing=true
-    const nextItem = this.queue.pop();
+    let nextItem: QueueItem | null = null;
+    if (this.repeatingSong) {
+      nextItem = this.nowPlaying;
+    } else {
+      nextItem = this.queue.pop();
+    }
     try {
       //clean up and start the disconnect timer, since we're out of songs
       if (!nextItem) {
@@ -232,6 +238,10 @@ class MusicPlayer {
   async skip() {
     console.log("Skipping song...");
     this.audioPlayer.stop();
+  }
+
+  setRepeat(repeat: boolean) {
+    this.repeatingSong = repeat;
   }
 
   async getNowPlayingStatus() {

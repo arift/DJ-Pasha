@@ -365,6 +365,32 @@ export const playingCommand = {
   },
 };
 
+export const repeatCommand = {
+  data: new SlashCommandBuilder()
+    .setName("repeat")
+    .setDescription("Turn on/off repeating the currently playing song."),
+  execute: async (interaction: ChatInputCommandInteraction<CacheType>) => {
+    try {
+      await interaction.deferReply();
+      if (await musicPlayerCheck(interaction)) return;
+
+      const player = getMusicPlayer();
+      if (!player) throw new Error("Missing player");
+      const { musicPlayer } = player;
+
+      musicPlayer.setRepeat(!musicPlayer.repeatingSong);
+
+      await interaction.editReply(
+        `Repeat toggled to ${musicPlayer.repeatingSong ? "On" : "Off"}`
+      );
+    } catch (err) {
+      await interaction.editReply(err.message);
+      console.error(err);
+      return;
+    }
+  },
+};
+
 export const statsCommand = {
   data: new SlashCommandBuilder()
     .setName("stats")
@@ -510,6 +536,7 @@ export const commands = {
   [moveCommand.data.name]: moveCommand,
   [shuffleCommand.data.name]: shuffleCommand,
   [skipCommand.data.name]: skipCommand,
+  [repeatCommand.data.name]: repeatCommand,
   [statsCommand.data.name]: statsCommand,
   [help.data.name]: help,
 };
