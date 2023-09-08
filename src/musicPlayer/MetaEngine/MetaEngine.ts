@@ -212,7 +212,7 @@ export class MetaEngine {
     } else if (endDateFormatted) {
       result += ` until ${endDateFormatted}`;
     } else {
-      result += ` of all time.`;
+      result += ` of all time`;
     }
     result += ":\n";
 
