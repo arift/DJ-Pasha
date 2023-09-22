@@ -169,6 +169,9 @@ class MusicPlayer {
       //play next song
       console.log(`Playing next song: ${this.nowPlaying.id}`);
       const filePath = await getSong(this.nowPlaying.id);
+      if (!filePath) {
+        throw new Error(`Could not get song ${this.nowPlaying.id}`);
+      }
       this.audioPlayer.play(createAudioResource(filePath));
       this.textChannel.send(await this.getNowPlayingStatus());
       try {
@@ -178,7 +181,7 @@ class MusicPlayer {
       }
     } catch (err) {
       await new Promise((res) => {
-        console.log(
+        console.error(
           "Problem while playing song. Waiting 3 seconds before trying next song..."
         );
         setTimeout(res, 3000);

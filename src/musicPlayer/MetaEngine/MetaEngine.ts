@@ -32,7 +32,7 @@ export class MetaEngine {
     )`);
   }
 
-  getInfo = async (videoId: string) => {
+  getInfo = async (videoId: string): Promise<SavedInfo> => {
     const row = await this.#db.getAsync(
       "select * from video_info where video_id = $videoId",
       {
@@ -44,13 +44,25 @@ export class MetaEngine {
     }
 
     console.log(`Fetching video info: ${videoId}`);
-    const info = await ytdl.getInfo(videoId, {
-      requestOptions: {
-        headers: {
-          cookie: process.env.COOKIE,
+    let info: ytdl.videoInfo;
+    try {
+      info = await ytdl.getInfo(videoId, {
+        requestOptions: {
+          headers: {
+            cookie: process.env.COOKIE,
+          },
         },
-      },
-    });
+      });
+    } catch (err) {
+      console.error("Error while fetching video: ", err);
+      return {
+        title: "Error",
+        ownerChannelName: "",
+        description: "",
+        lengthSeconds: "0",
+        videoUrl: videoId,
+      };
+    }
 
     const savedInfo: SavedInfo = {
       title: info.videoDetails.title,
@@ -113,7 +125,7 @@ export class MetaEngine {
   };
 
   getSong = async (videoId: string) => {
-    return new Promise<string>((res, rej) => {
+    return new Promise<string | null>((res, rej) => {
       const t = Date.now();
       const cachedFilePath = path.resolve(this.#cachePath, videoId);
 
@@ -136,7 +148,8 @@ export class MetaEngine {
       });
       ytStream.pipe(fs.createWriteStream(stagingFilePath));
       ytStream.on("error", (err) => {
-        rej(err);
+        console.log("Error while downloading song", err);
+        res(null);
       });
       ytStream.on("end", () => {
         console.log(
