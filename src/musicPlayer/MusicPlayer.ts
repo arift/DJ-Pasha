@@ -181,10 +181,10 @@ class MusicPlayer {
       }
     } catch (err) {
       await new Promise((res) => {
-        console.error(
-          "Problem while playing song. Waiting 3 seconds before trying next song..."
-        );
-        setTimeout(res, 3000);
+        const error = `Unable to play <${nextItem.url}>. It may be age restricted. Skipping to the next song in the queue...`;
+        console.error(error);
+        this.textChannel.send(error);
+        setTimeout(res, 5000);
       });
       await this.playNextSong();
     }
