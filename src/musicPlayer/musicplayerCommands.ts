@@ -82,7 +82,12 @@ export const playCommand = {
       if (ytpl.validateID(url ?? "")) {
         const playlistId = await ytpl.getPlaylistID(url!);
         const playlist = await getPlaylistInfo(playlistId);
-
+        if (!playlist) {
+          await interaction.editReply(
+            `:face_palm: Couldn't get playlist info. Is it private? ${url}`
+          );
+          return;
+        }
         musicPlayer.addSong(
           playlist.items.map((item) => ({
             id: ytdl.getVideoID(item.shortUrl),

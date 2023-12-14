@@ -91,13 +91,20 @@ export class MetaEngine {
   };
 
   getPlaylistInfo = async (playlistId: string) => {
-    const playlistInfo = await ytpl(playlistId, {
-      requestOptions: {
-        headers: {
-          cookie: process.env.COOKIE ?? "",
+    let playlistInfo: ytpl.Result | null = null;
+    try {
+      playlistInfo = await ytpl(playlistId, {
+        requestOptions: {
+          headers: {
+            cookie: process.env.COOKIE ?? "",
+          },
         },
-      },
-    });
+      });
+    } catch (err) {
+      console.error("Error while fetching playlist: ", err);
+      return null;
+    }
+
     let itemsQueryValues: string[] = [];
     playlistInfo.items.forEach((info) => {
       const savedInfo: SavedInfo = {
