@@ -92,9 +92,13 @@ class MusicPlayer {
     this.onVoiceStateUpdate = (oldState, newState) => {
       if (this.voiceChannel.members.size < 2) {
         console.log("No one is in server, starting disconnect timer.");
+        this.audioPlayer.pause();
         this.startDiconnectTimeout();
       } else if (this.playing && this.disconnectTimeout) {
         this.stopDisconnectTimeout();
+        if (this.audioPlayer.state.status === AudioPlayerStatus.Paused) {
+          this.audioPlayer.unpause();
+        }
       }
     };
     this.client.on("voiceStateUpdate", this.onVoiceStateUpdate);
