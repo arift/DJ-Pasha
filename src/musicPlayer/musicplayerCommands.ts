@@ -1,3 +1,4 @@
+import ytdl from "@distube/ytdl-core";
 import { endOfDay, startOfDay, sub } from "date-fns";
 import {
   ActionRowBuilder,
@@ -10,7 +11,6 @@ import {
   GuildMember,
   SlashCommandBuilder,
 } from "discord.js";
-import ytdl from "ytdl-core";
 import ytpl from "ytpl";
 import { generatePlayStatsText, getInfo, getPlaylistInfo } from "./MetaEngine";
 import MusicPlayer from "./MusicPlayer";
@@ -98,8 +98,7 @@ export const playCommand = {
         );
 
         await interaction.editReply(
-          `${firstTimeText! ? `${firstTimeText}\n\n` : ""}:notes: Added **${
-            playlist.title
+          `${firstTimeText! ? `${firstTimeText}\n\n` : ""}:notes: Added **${playlist.title
           }** playlist to the queue with ${playlist.items.length} songs.`
         );
       } else if (ytdl.validateURL(url!)) {

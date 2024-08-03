@@ -1,7 +1,7 @@
+import ytdl from "@distube/ytdl-core";
 import { format, formatISO } from "date-fns";
 import fs from "node:fs";
 import path from "node:path";
-import ytdl from "ytdl-core";
 import ytpl from "ytpl";
 import { Database, getDb } from "../db";
 import { SavedInfo } from "../types";
@@ -120,7 +120,7 @@ export class MetaEngine {
     try {
       this.#db.runAsync(
         "INSERT OR REPLACE INTO video_info (video_id, info) VALUES " +
-          playlistInfo.items.map(() => "(?, ?)").join(", "),
+        playlistInfo.items.map(() => "(?, ?)").join(", "),
         itemsQueryValues
       );
       this.#db.runAsync("commit");
