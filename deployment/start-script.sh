@@ -11,11 +11,14 @@ do
 	echo "--Backing up $app..."
 	cp $app/app.db /mnt/external-drive/DJ-Pasha-Admin/backup/app.db.$app
 	echo "--Backing up $app done."
+	echo "--Resetting git repo for $app..."
+	git -C $app reset --hard
+	echo "--Resetting git repo for $app done."
 	echo "--Pulling $app..."
 	git -C $app pull --ff
 	echo "--Pulling $app done."
     echo "--Install npm packages $app..."
-	npm --prefix $app install
+	npm --prefix $app ci
     echo "--Install npm packages $app done."
 	echo "--Building project $app..."
 	npm --prefix $app run-script build
