@@ -12,13 +12,13 @@ console.log(`Setting cache directory to ${CACHE_PATH}`);
 console.log(`Setting db directory to ${DB_FILE_PATH}`);
 
 if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir);
+  fs.mkdirSync(dbDir, { recursive: true });
 }
 
 if (!fs.existsSync(CACHE_PATH)) {
-  fs.mkdirSync(CACHE_PATH);
+  fs.mkdirSync(CACHE_PATH, { recursive: true });
 }
 
 if (!fs.existsSync(STAGING_PATH)) {
-  fs.mkdirSync(STAGING_PATH);
+  fs.mkdirSync(STAGING_PATH, { recursive: true });
 }
