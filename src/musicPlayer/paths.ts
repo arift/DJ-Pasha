@@ -1,8 +1,6 @@
 import fs from "fs";
 import path from "path";
-
-const cacheDir = process.env.CACHE_DIR ?? './cache';
-const dbDir = process.env.DB_DIR ?? './db';
+import { cacheDir, dbDir } from "../args";
 
 export const CACHE_PATH = path.resolve(cacheDir);
 export const STAGING_PATH = path.resolve(CACHE_PATH, "staging");

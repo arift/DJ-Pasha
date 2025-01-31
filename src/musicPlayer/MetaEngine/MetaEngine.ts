@@ -3,6 +3,7 @@ import { format, formatISO } from "date-fns";
 import fs from "node:fs";
 import path from "node:path";
 import ytpl from "ytpl";
+import { cookie } from "../../args";
 import { Database, getDb } from "../db";
 import { SavedInfo } from "../types";
 import { rjust } from "../utils";
@@ -49,7 +50,7 @@ export class MetaEngine {
       info = await ytdl.getInfo(videoId, {
         requestOptions: {
           headers: {
-            cookie: process.env.COOKIE,
+            cookie: cookie ?? "",
           },
         },
       });
@@ -96,7 +97,7 @@ export class MetaEngine {
       playlistInfo = await ytpl(playlistId, {
         requestOptions: {
           headers: {
-            cookie: process.env.COOKIE ?? "",
+            cookie: cookie ?? "",
           },
         },
       });
@@ -149,7 +150,7 @@ export class MetaEngine {
         quality: "highestaudio",
         requestOptions: {
           headers: {
-            cookie: process.env.COOKIE,
+            cookie: cookie ?? "",
           },
         },
       });

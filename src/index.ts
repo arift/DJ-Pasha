@@ -1,6 +1,9 @@
 import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
 import "dotenv/config";
+import { appId, discordToken, guildId } from "./args";
 import { commands } from "./musicPlayer/musicplayerCommands";
+
+
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
@@ -49,12 +52,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 (async () => {
   try {
     const rest = new REST({ version: "10" }).setToken(
-      process.env.DISCORD_TOKEN
+      discordToken
     );
-    console.log("Loading for GUILD ID " + process.env.GUILD_ID);
+    console.log("Loading for GUILD ID " + guildId);
 
     await rest.put(
-      Routes.applicationGuildCommands(process.env.APP_ID, process.env.GUILD_ID),
+      Routes.applicationGuildCommands(appId, guildId),
       { body: Object.values(commands).map((command) => command.data.toJSON()) }
     );
 
@@ -68,4 +71,4 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 })();
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(discordToken);

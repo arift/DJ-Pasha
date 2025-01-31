@@ -1,10 +1,11 @@
 import { cpus } from "node:os";
 import { isMainThread, MessageChannel, Worker } from "node:worker_threads";
 import { CACHE_PATH, DB_FILE_PATH, STAGING_PATH } from "../paths";
+import * as args from './../../args';
 import { MetaEngine } from "./MetaEngine";
 
 const numOfCpus = cpus().length;
-const workerCount = Math.ceil(numOfCpus / 2);
+const workerCount = 2
 
 const workers: Worker[] = [];
 console.log(`Starting ${workerCount} workers`);
@@ -18,6 +19,7 @@ if (isMainThread) {
           stagingPath: STAGING_PATH,
           dbPath: DB_FILE_PATH,
         },
+        argv: Object.entries(args).map(([key, value]) => `--${key}=${value}`),
       })
     );
   }
