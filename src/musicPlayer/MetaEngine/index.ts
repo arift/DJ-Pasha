@@ -1,6 +1,6 @@
 import { cpus } from "node:os";
 import { isMainThread, MessageChannel, Worker } from "node:worker_threads";
-import { CACHE_PATH, DB_PATH, STAGING_PATH } from "../paths";
+import { CACHE_PATH, DB_FILE_PATH, STAGING_PATH } from "../paths";
 import { MetaEngine } from "./MetaEngine";
 
 const numOfCpus = cpus().length;
@@ -16,7 +16,7 @@ if (isMainThread) {
         workerData: {
           cachePath: CACHE_PATH,
           stagingPath: STAGING_PATH,
-          dbPath: DB_PATH,
+          dbPath: DB_FILE_PATH,
         },
       })
     );

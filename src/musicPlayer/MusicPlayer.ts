@@ -37,9 +37,8 @@ const getPageFooter = (
     (cum, qInfo) => cum + Number(qInfo.info.lengthSeconds),
     0
   );
-  return `Page ${page}/${lastPage}\nTotal number of songs in queue: ${
-    queueInfos.length
-  }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`;
+  return `Page ${page}/${lastPage}\nTotal number of songs in queue: ${queueInfos.length
+    }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`;
 };
 
 class MusicPlayer {
@@ -135,15 +134,13 @@ class MusicPlayer {
     console.log("Disconnecting. Clearing everything up...");
     clearTimeout(this.disconnectTimeout ?? undefined);
     this.disconnectTimeout = null;
-    this.voiceConnection.removeAllListeners();
-    this.audioPlayer.removeAllListeners();
     this.voiceConnection.destroy();
     this.audioPlayer.stop();
     if (this.queueCollector) {
       this.queueCollector.stop();
       this.queueCollector = null;
     }
-    this.client.removeListener("voiceStateUpdate", this.onVoiceStateUpdate);
+    this.client.destroy();
     removeMusicPlayer();
   };
 
@@ -369,8 +366,7 @@ class MusicPlayer {
           .slice(startIdx, endIdx === startIdx ? endIdx + 1 : endIdx)
           .map(
             (qInfo, idx) =>
-              `**${idx + 1 + startIdx}**: ${
-                qInfo.info.title
+              `**${idx + 1 + startIdx}**: ${qInfo.info.title
               } - *${formatUsername(
                 qInfo.request.by,
                 qInfo.request.byNickname

@@ -4,13 +4,13 @@
   "description": "",
   "scripts": {
     "build": "npx rimraf ./build && tsc -p tsconfig.json --outDir build",
-    "start": "npm run-script build && node build/index.js"
+    "dev": "npm run-script build && node build/index.js"
   },
   "author": "Arif Topcu",
   "license": "MIT",
   "dependencies": {
     "@discordjs/voice": "^0.16.0",
-    "@distube/ytdl-core": "^4.14.4",
+    "@distube/ytdl-core": "^4.16.0",
     "date-fns": "^2.30.0",
     "discord-interactions": "^3.4.0",
     "discord.js": "^14.11.0",

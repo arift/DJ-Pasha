@@ -1,23 +1,18 @@
 import fs from "fs";
 import path from "path";
-import { getArgv } from "./utils";
 
-const PROGRAM_FILES_ROOT = getArgv("--appDir") ?? "";
-const DB_ROOT = getArgv("--dbDir") ?? "";
+const cacheDir = process.env.CACHE_DIR ?? './cache';
+const dbDir = process.env.DB_DIR ?? './db';
 
-export const APP_DIR = path.resolve(PROGRAM_FILES_ROOT, "PashaPlayerFiles");
-export const CACHE_PATH = path.resolve(APP_DIR, "cache");
+export const CACHE_PATH = path.resolve(cacheDir);
 export const STAGING_PATH = path.resolve(CACHE_PATH, "staging");
-export const DB_PATH = path.resolve(DB_ROOT, "app.db");
+export const DB_FILE_PATH = path.resolve(dbDir, "app.db");
 
-console.log(`Setting app directory to ${APP_DIR}`);
+console.log(`Setting cache directory to ${CACHE_PATH}`);
+console.log(`Setting db directory to ${DB_FILE_PATH}`);
 
-if (PROGRAM_FILES_ROOT.length > 0 && !fs.existsSync(PROGRAM_FILES_ROOT)) {
-  fs.mkdirSync(PROGRAM_FILES_ROOT);
-}
-
-if (!fs.existsSync(APP_DIR)) {
-  fs.mkdirSync(APP_DIR);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir);
 }
 
 if (!fs.existsSync(CACHE_PATH)) {
