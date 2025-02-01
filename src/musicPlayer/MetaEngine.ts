@@ -23,15 +23,16 @@ export class MetaEngine {
       video_id TEXT PRIMARY KEY, 
       info TEXT, 
       insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-    )`);
+    )`, () => {
+      this.#db.run(`
+        CREATE TABLE IF NOT EXISTS plays (
+        video_id TEXT, 
+        username TEXT, 
+        play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
+        PRIMARY KEY (video_id, username, play_timestamp)
+      )`);
+    });
 
-    this.#db.run(`
-      CREATE TABLE IF NOT EXISTS plays (
-      video_id TEXT, 
-      username TEXT, 
-      play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-      PRIMARY KEY (video_id, username, play_timestamp)
-    )`);
   }
 
   getInfo = async (videoId: string): Promise<SavedInfo> => {
