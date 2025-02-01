@@ -17,22 +17,20 @@ export class MetaEngine {
   constructor(args: { cacheDir: string, stagingDir: string, dbDir: string }) {
     this.#cacheDir = args.cacheDir;
     this.#stagingDir = args.stagingDir;
-    this.#db = getDb(args.dbDir);
-    this.#db.run(`
-      CREATE TABLE IF NOT EXISTS video_info (
-      video_id TEXT PRIMARY KEY, 
-      info TEXT, 
-      insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-    )`, () => {
+    this.#db = getDb(args.dbDir, (err) => {
       this.#db.run(`
-        CREATE TABLE IF NOT EXISTS plays (
+        CREATE TABLE IF NOT EXISTS video_info (
+        video_id TEXT PRIMARY KEY, 
+        info TEXT, 
+        insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+      ); 
+      CREATE TABLE IF NOT EXISTS plays (
         video_id TEXT, 
         username TEXT, 
         play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
         PRIMARY KEY (video_id, username, play_timestamp)
-      )`);
+      `);
     });
-
   }
 
   getInfo = async (videoId: string): Promise<SavedInfo> => {

@@ -6,8 +6,8 @@ export type Database = SQLiteDatabase & {
   allAsync: (sql: string, params?: any) => Promise<any>;
 };
 
-export const getDb = (path: string) => {
-  const db = new sqlite3.Database(path) as Database;
+export const getDb = (path: string, cb?: (err: Error) => void) => {
+  const db = new sqlite3.Database(path, cb) as Database;
   (db as Database).runAsync = (sql: string, params: any = {}) =>
     new Promise<any>((res, rej) => {
       db.run(sql, params, (result, err) => {
