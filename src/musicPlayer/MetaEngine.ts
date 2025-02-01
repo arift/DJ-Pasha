@@ -24,12 +24,16 @@ export class MetaEngine {
         info TEXT, 
         insertion_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
       ); 
-      CREATE TABLE IF NOT EXISTS plays (
-        video_id TEXT, 
-        username TEXT, 
-        play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-        PRIMARY KEY (video_id, username, play_timestamp)
-      `);
+      `, () => {
+        this.#db.run(`
+          CREATE TABLE IF NOT EXISTS plays (
+          video_id TEXT, 
+          username TEXT, 
+          play_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          PRIMARY KEY (video_id, username)
+        );
+        `);
+      });
     });
   }
 
