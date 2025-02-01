@@ -1,10 +1,10 @@
 {
   "name": "dj-pasha",
-  "version": "1.0.0",
+  "version": "0.0.10",
   "description": "",
   "scripts": {
     "build": "npx rimraf ./build && tsc -p tsconfig.json --outDir build",
-    "dev": "npm run-script build && node build/index.js"
+    "start": "node build/index.js --appId=$APP_ID --guildId=$GUILD_ID --discordToken=${DISCORD_TOKEN} --cookie=${COOKIE}"
   },
   "author": "Arif Topcu",
   "license": "MIT",
