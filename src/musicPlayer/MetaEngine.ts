@@ -3,20 +3,21 @@ import { format, formatISO } from "date-fns";
 import fs from "node:fs";
 import path from "node:path";
 import ytpl from "ytpl";
-import { cookie } from "../../args";
-import { Database, getDb } from "../db";
-import { SavedInfo } from "../types";
-import { rjust } from "../utils";
+import { cookie } from "../args";
+import { Database, getDb } from "./db";
+import { CACHE_PATH, DB_FILE_PATH, STAGING_PATH } from "./paths";
+import { SavedInfo } from "./types";
+import { rjust } from "./utils";
 
 export class MetaEngine {
   #db: Database;
-  #cachePath: string;
-  #stagingPath: string;
+  #cacheDir: string;
+  #stagingDir: string;
 
-  constructor(cachePath: string, stagingPath: string, dbPath: string) {
-    this.#cachePath = cachePath;
-    this.#stagingPath = stagingPath;
-    this.#db = getDb(dbPath);
+  constructor(args: { cacheDir: string, stagingDir: string, dbDir: string }) {
+    this.#cacheDir = args.cacheDir;
+    this.#stagingDir = args.stagingDir;
+    this.#db = getDb(args.dbDir);
     this.#db.run(`
       CREATE TABLE IF NOT EXISTS video_info (
       video_id TEXT PRIMARY KEY, 
@@ -135,7 +136,7 @@ export class MetaEngine {
   getSong = async (videoId: string) => {
     return new Promise<string | null>((res, rej) => {
       const t = Date.now();
-      const cachedFilePath = path.resolve(this.#cachePath, videoId);
+      const cachedFilePath = path.resolve(this.#cacheDir, videoId);
 
       if (fs.existsSync(cachedFilePath)) {
         console.log(`Song in cache: [${videoId}]`);
@@ -144,7 +145,7 @@ export class MetaEngine {
       }
 
       console.log(`Song not in cache, downloading it: [${videoId}]`);
-      const stagingFilePath = path.resolve(this.#stagingPath, videoId);
+      const stagingFilePath = path.resolve(this.#stagingDir, videoId);
       const ytStream = ytdl(videoId, {
         filter: "audioonly",
         quality: "highestaudio",
@@ -154,7 +155,8 @@ export class MetaEngine {
           },
         },
       });
-      ytStream.pipe(fs.createWriteStream(stagingFilePath));
+      const writeStream = fs.createWriteStream(stagingFilePath) as unknown as NodeJS.WritableStream;
+      ytStream.pipe(writeStream);
       ytStream.on("error", (err) => {
         console.log("Error while downloading song", err);
         res(null);
@@ -321,3 +323,11 @@ export class MetaEngine {
     await this.#db.runAsync("commit");
   };
 }
+
+const metaEngine = new MetaEngine({
+  cacheDir: CACHE_PATH,
+  stagingDir: STAGING_PATH,
+  dbDir: DB_FILE_PATH,
+})
+
+export default metaEngine;

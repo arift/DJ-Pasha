@@ -19,7 +19,7 @@ import {
   VoiceBasedChannel,
   VoiceState,
 } from "discord.js";
-import { getInfo, getInfos, getSong, insertNewPlay } from "./MetaEngine";
+import metaEngine from "./MetaEngine";
 import { removeMusicPlayer } from "./musicPlayerInstance";
 import Queue, { QueueItem } from "./Queue";
 import { SavedInfo } from "./types";
@@ -40,6 +40,9 @@ const getPageFooter = (
   return `Page ${page}/${lastPage}\nTotal number of songs in queue: ${queueInfos.length
     }\nTotal queue time: ${toHoursAndMinutes(totalQueueSeconds)}`;
 };
+
+
+const { getInfo, getInfos, getSong, insertNewPlay } = metaEngine;
 
 class MusicPlayer {
   voiceChannel: VoiceBasedChannel;

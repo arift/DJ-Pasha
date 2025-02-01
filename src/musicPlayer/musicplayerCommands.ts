@@ -12,7 +12,7 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import ytpl from "ytpl";
-import { generatePlayStatsText, getInfo, getPlaylistInfo } from "./MetaEngine";
+import metaEngine from "./MetaEngine";
 import MusicPlayer from "./MusicPlayer";
 import {
   addMusicPlayer,
@@ -32,6 +32,8 @@ const musicPlayerCheck = async (
   }
   return false;
 };
+
+const { generatePlayStatsText, getInfo, getPlaylistInfo } = metaEngine;
 
 export const playCommand = {
   data: new SlashCommandBuilder()
